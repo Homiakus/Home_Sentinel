@@ -13,13 +13,17 @@
 - Stage 8 — door and siren physical effects use desired state, idempotency/reconciliation, human gates and fail-safe compensation.
 - Stage 9 — bounded temporal correlation with dedup, lateness rules, cross-camera context and concurrency coverage.
 - Stage 10 — bounded camera recovery graph with verification and operator escalation.
-- Stage 11.1 — incident operator read model projects committed ADGO state instead of maintaining a second FSM.
-- Stage 11.2 — timeline is sourced from durable ordered history and credential-like fields are redacted.
-- Stage 11.3 — `Explain` and execution diagnostics are exposed through Home Sentinel DTOs without exposing raw execution data.
-- CI — format, vet, unit and race commands configured for every push to main/PR.
+- Stage 11 — operator read model, durable timeline, Explain and Diagnostics.
+- Stage 12.1 — callback token authentication uses HMAC-SHA256, constant-time verification and expiry.
+- Stage 12.2 — bounded replay guard is implemented as edge defense; ADGO SeenEvents remains durable semantic deduplication.
+- Stage 12.3 — explicit threat model documents trust boundaries, authority and remaining deployment risks.
+- Stage 13.1 — benchmark harness exists for correlation and risk hot paths.
+- Stage 13.2 — CI runs module verification, format, vet, unit, race and benchmark smoke checks.
 
-## Next
+## Remaining production work
 
-1. Observe/fix CI result when the connector exposes the push workflow run.
-2. Add callback authentication/replay hardening and explicit threat model.
-3. Add benchmark/performance budgets and release gates.
+- Real camera/RTSP, Home Assistant, notification and hardware gateway adapters.
+- Authenticated HTTP/TLS ingress, user authorization/RBAC and key rotation.
+- Target-hardware benchmark baseline and numeric regression thresholds.
+- Cross-platform/system integration tests with actual devices.
+- Observe/fix the push CI run once GitHub connector exposes it; the available workflow-run wrapper filters to pull-request runs and currently returns no push run.

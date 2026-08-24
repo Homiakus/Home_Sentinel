@@ -5,23 +5,33 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
-          cache: true
+          # go.sum is not committed yet; enabling setup-go cache before the
+          # module lock exists can fail before `go mod download` gets a chance
+          # to materialize it. Stage 14 turns caching back on with go.sum.
+          cache: false
 
-      - name: Download modules
-        run: go mod download
+      - name: Download and verify modules
+        run: |
+          go mod download
+          go mod verify
+          go list ./... >/dev/null
 
       - name: Format check
         run: |
@@ -31,8 +41,13 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      - name: Test
+      - name: Unit tests
         run: go test ./... -count=1
 
-      - name: Race test
+      - name: Race tests
         run: go test -race ./... -count=1
+
+      - name: Benchmark smoke
+        run: |
+          go test ./internal/policy/risk -run '^$' -bench BenchmarkAssess -benchtime=25x
+          go test ./internal/correlation -run '^$' -bench BenchmarkCorrelatorIngest -benchtime=25x
