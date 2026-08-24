@@ -67,7 +67,7 @@ func (s *Service) Start(ctx context.Context, trigger domainincident.Trigger) (*a
 }
 
 // Drive executes currently runnable work for one incident and returns when it
-// is terminal or durably waiting for an external event.
+// is terminal, awaiting a human decision, or durably waiting for an event.
 func (s *Service) Drive(ctx context.Context, executionID string) (*adgo.Execution, error) {
 	return s.production.Engine.RunLocal(ctx, executionID, adgo.LocalRunOptions{Worker: s.worker})
 }
@@ -82,11 +82,53 @@ func (s *Service) OwnerResponse(ctx context.Context, executionID, eventID string
 		raw = encoded
 	}
 	if err := s.production.Engine.Signal(ctx, executionID, adgo.Event{
-		ID: eventID, Type: OwnerResponseEvent, TargetNode: NodeAwait, Payload: raw,
+		ID: eventID, Type: OwnerResponseEvent, TargetNode: NodeAwaitAck, Payload: raw,
 	}); err != nil {
 		return nil, err
 	}
 	return s.Drive(ctx, executionID)
+}
+
+func (s *Service) ResolveOwnerDecision(
+	ctx context.Context,
+	executionID string,
+	decision domainincident.Decision,
+	actor string,
+	reason string,
+	payload any,
+) (*adgo.Execution, error) {
+	mapped, err := mapDecision(decision)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.production.Engine.ResolveHuman(ctx, executionID, NodeHumanDecision, adgo.HumanResolution{
+		Decision: mapped,
+		Actor:    actor,
+		Reason:   reason,
+		Payload:  payload,
+	}); err != nil {
+		return nil, err
+	}
+	return s.Drive(ctx, executionID)
+}
+
+func mapDecision(value domainincident.Decision) (adgo.HumanDecision, error) {
+	switch value {
+	case domainincident.DecisionApprove:
+		return adgo.HumanApprove, nil
+	case domainincident.DecisionEdit:
+		return adgo.HumanEdit, nil
+	case domainincident.DecisionReject:
+		return adgo.HumanReject, nil
+	case domainincident.DecisionRetry:
+		return adgo.HumanRetry, nil
+	case domainincident.DecisionConfirm, domainincident.DecisionAcknowledge:
+		return adgo.HumanConfirm, nil
+	case domainincident.DecisionAbort:
+		return adgo.HumanAbort, nil
+	default:
+		return "", fmt.Errorf("incident: unsupported owner decision %q", value)
+	}
 }
 
 func (s *Service) Get(ctx context.Context, executionID string) (*adgo.Execution, error) {

@@ -5,11 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
-	"strings"
 
-	"github.com/Homiakus/Home_Sentinel/internal/domain/incident"
+	domainincident "github.com/Homiakus/Home_Sentinel/internal/domain/incident"
 	"github.com/Homiakus/Home_Sentinel/internal/gateway"
+	riskpolicy "github.com/Homiakus/Home_Sentinel/internal/policy/risk"
 	"github.com/Homiakus/axiom/adgo"
 )
 
@@ -22,27 +21,25 @@ func NewRegistry(deps Dependencies) *adgo.Registry {
 	registry.Activity(ActivityNormalize, normalizeTrigger)
 	registry.Activity(ActivityCorrelate, correlateEvidence)
 	registry.Activity(ActivityAssess, assessRisk)
+	registry.Decision(DecisionRouteRisk, routeRisk)
 	registry.Activity(ActivityNotify, notifyOwner(deps.Notifier))
 	registry.Activity(ActivityArchive, archiveIncident)
 	return registry
 }
 
 func normalizeTrigger(_ context.Context, req adgo.ActivityRequest) (adgo.ActivityResult, error) {
-	trigger, err := readData[incident.Trigger](req.Data, "trigger")
+	trigger, err := readData[domainincident.Trigger](req.Data, "trigger")
 	if err != nil {
 		return adgo.ActivityResult{}, adgo.Fail(adgo.FailureInvalidInput, err)
 	}
 	if err := trigger.Validate(); err != nil {
 		return adgo.ActivityResult{}, adgo.Fail(adgo.FailureInvalidInput, err)
 	}
-	return adgo.ActivityResult{
-		Facts:   map[string]any{"trigger_valid": true},
-		Outcome: adgo.OutcomeCompleted,
-	}, nil
+	return adgo.ActivityResult{Facts: map[string]any{"trigger_valid": true}, Outcome: adgo.OutcomeCompleted}, nil
 }
 
 func correlateEvidence(_ context.Context, req adgo.ActivityRequest) (adgo.ActivityResult, error) {
-	trigger, err := readData[incident.Trigger](req.Data, "trigger")
+	trigger, err := readData[domainincident.Trigger](req.Data, "trigger")
 	if err != nil {
 		return adgo.ActivityResult{}, adgo.Fail(adgo.FailureInvalidInput, err)
 	}
@@ -60,7 +57,7 @@ func correlateEvidence(_ context.Context, req adgo.ActivityRequest) (adgo.Activi
 }
 
 func assessRisk(_ context.Context, req adgo.ActivityRequest) (adgo.ActivityResult, error) {
-	trigger, err := readData[incident.Trigger](req.Data, "trigger")
+	trigger, err := readData[domainincident.Trigger](req.Data, "trigger")
 	if err != nil {
 		return adgo.ActivityResult{}, adgo.Fail(adgo.FailureInvalidInput, err)
 	}
@@ -68,33 +65,20 @@ func assessRisk(_ context.Context, req adgo.ActivityRequest) (adgo.ActivityResul
 	if err != nil {
 		return adgo.ActivityResult{}, adgo.Fail(adgo.FailureInvalidInput, err)
 	}
-
-	score := trigger.Confidence * 0.55
-	kind := strings.ToLower(trigger.Kind)
-	if strings.Contains(kind, "person") {
-		score += 0.30
+	assessment, err := riskpolicy.DefaultPolicy().Assess(riskpolicy.FeaturesFromTrigger(trigger, evidenceCount))
+	if err != nil {
+		return adgo.ActivityResult{}, adgo.Fail(adgo.FailureInvalidInput, err)
 	}
-	if evidenceCount > 0 {
-		score += math.Min(0.15, float64(evidenceCount)*0.05)
-	}
-	if score > 1 {
-		score = 1
-	}
-
-	risk := incident.RiskLow
-	switch {
-	case score >= 0.90:
-		risk = incident.RiskCritical
-	case score >= 0.75:
-		risk = incident.RiskHigh
-	case score >= 0.50:
-		risk = incident.RiskMedium
-	}
-	summary := fmt.Sprintf("%s from %s; confidence=%.3f evidence=%d risk=%s", trigger.Kind, trigger.SourceID, trigger.Confidence, evidenceCount, risk)
+	summary := fmt.Sprintf(
+		"%s from %s; confidence=%.3f evidence=%d risk=%s score=%.3f policy=%s",
+		trigger.Kind, trigger.SourceID, trigger.Confidence, evidenceCount,
+		assessment.Risk, assessment.Score, assessment.PolicyVersion,
+	)
 	return adgo.ActivityResult{
 		Facts: map[string]any{
-			"risk":             risk,
-			"risk_score":       score,
+			"risk":             assessment.Risk,
+			"risk_score":       assessment.Score,
+			"risk_assessment":  assessment,
 			"incident_summary": summary,
 		},
 		Quality: adgo.QualityVector{"risk_input_quality": trigger.Confidence},
@@ -102,12 +86,29 @@ func assessRisk(_ context.Context, req adgo.ActivityRequest) (adgo.ActivityResul
 	}, nil
 }
 
+func routeRisk(_ context.Context, snapshot adgo.Snapshot) (adgo.Outcome, error) {
+	risk, err := readData[domainincident.Risk](snapshot.Data, "risk")
+	if err != nil {
+		return adgo.OutcomeFail, err
+	}
+	switch risk {
+	case domainincident.RiskLow:
+		return adgo.OutcomeCompleted, nil
+	case domainincident.RiskMedium:
+		return adgo.OutcomePass, nil
+	case domainincident.RiskHigh, domainincident.RiskCritical:
+		return adgo.OutcomeHuman, nil
+	default:
+		return adgo.OutcomeFail, fmt.Errorf("incident: unsupported risk %q", risk)
+	}
+}
+
 func notifyOwner(notifier gateway.Notifier) adgo.ActivityHandler {
 	return func(ctx context.Context, req adgo.ActivityRequest) (adgo.ActivityResult, error) {
 		if notifier == nil {
 			return adgo.ActivityResult{}, adgo.Fail(adgo.FailurePermanent, errors.New("incident: notifier is not configured"))
 		}
-		risk, err := readData[incident.Risk](req.Data, "risk")
+		risk, err := readData[domainincident.Risk](req.Data, "risk")
 		if err != nil {
 			return adgo.ActivityResult{}, adgo.Fail(adgo.FailureInvalidInput, err)
 		}
@@ -126,14 +127,14 @@ func notifyOwner(notifier gateway.Notifier) adgo.ActivityHandler {
 			return adgo.ActivityResult{}, adgo.Fail(adgo.FailureAmbiguousSideEffect, fmt.Errorf("notification effect ambiguous: %s", result.ProviderID))
 		}
 		return adgo.ActivityResult{
-			Facts: map[string]any{"notification_provider_id": result.ProviderID},
+			Facts:   map[string]any{"notification_provider_id": result.ProviderID},
 			Outcome: adgo.OutcomeCompleted,
 		}, nil
 	}
 }
 
 func archiveIncident(_ context.Context, _ adgo.ActivityRequest) (adgo.ActivityResult, error) {
-	return adgo.ActivityResult{Facts: map[string]any{"archived": true}, Outcome: adgo.OutcomeCompleted}, nil
+	return adgo.ActivityResult{Outcome: adgo.OutcomeCompleted}, nil
 }
 
 func readData[T any](data map[string]json.RawMessage, key string) (T, error) {

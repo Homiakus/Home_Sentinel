@@ -30,14 +30,44 @@ const (
 	StatusArchived     Status = "archived"
 )
 
+type Decision string
+
+const (
+	DecisionAcknowledge Decision = "acknowledge"
+	DecisionApprove     Decision = "approve"
+	DecisionEdit        Decision = "edit"
+	DecisionReject      Decision = "reject"
+	DecisionRetry       Decision = "retry"
+	DecisionConfirm     Decision = "confirm"
+	DecisionAbort       Decision = "abort"
+)
+
+type IdentityState string
+
+const (
+	IdentityUnspecified IdentityState = ""
+	IdentityKnown       IdentityState = "known"
+	IdentityUnknown     IdentityState = "unknown"
+	IdentityUncertain   IdentityState = "uncertain"
+)
+
+type SecurityContext struct {
+	AlarmMode          string        `json:"alarmMode,omitempty"`
+	Identity           IdentityState `json:"identity,omitempty"`
+	EntryActive        bool          `json:"entryActive,omitempty"`
+	DwellSeconds       float64       `json:"dwellSeconds,omitempty"`
+	CrossCameraMatches int           `json:"crossCameraMatches,omitempty"`
+}
+
 type Trigger struct {
-	EventID      string         `json:"eventId"`
-	SourceID     string         `json:"sourceId"`
-	Kind         string         `json:"kind"`
-	OccurredAt   time.Time      `json:"occurredAt"`
-	Confidence   float64        `json:"confidence,omitempty"`
-	Artifacts    []artifact.Ref `json:"artifacts,omitempty"`
-	CorrelationID string        `json:"correlationId,omitempty"`
+	EventID       string          `json:"eventId"`
+	SourceID      string          `json:"sourceId"`
+	Kind          string          `json:"kind"`
+	OccurredAt    time.Time       `json:"occurredAt"`
+	Confidence    float64         `json:"confidence,omitempty"`
+	Artifacts     []artifact.Ref  `json:"artifacts,omitempty"`
+	CorrelationID string          `json:"correlationId,omitempty"`
+	Context       SecurityContext `json:"context,omitempty"`
 }
 
 func (t Trigger) Validate() error {
@@ -49,6 +79,12 @@ func (t Trigger) Validate() error {
 	}
 	if t.Confidence < 0 || t.Confidence > 1 {
 		return fmt.Errorf("incident: confidence must be in [0,1], got %f", t.Confidence)
+	}
+	if t.Context.DwellSeconds < 0 {
+		return errors.New("incident: dwellSeconds must be >= 0")
+	}
+	if t.Context.CrossCameraMatches < 0 {
+		return errors.New("incident: crossCameraMatches must be >= 0")
 	}
 	for i, ref := range t.Artifacts {
 		if err := ref.Validate(); err != nil {
