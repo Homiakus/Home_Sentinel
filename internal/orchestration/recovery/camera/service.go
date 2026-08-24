@@ -2,9 +2,13 @@ package camera
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
+	"sync"
 
 	domainrecovery "github.com/Homiakus/Home_Sentinel/internal/domain/recovery"
+	"github.com/Homiakus/Home_Sentinel/internal/orchestration/resourceguard"
 	"github.com/Homiakus/axiom/adgo"
 )
 
@@ -21,6 +25,7 @@ func DefaultConfig(root string) Config {
 type Service struct {
 	production *adgo.Production
 	worker     adgo.WorkerSpec
+	startMu    sync.Mutex
 }
 
 func Open(config Config, deps Dependencies) (*Service, error) {
@@ -54,9 +59,34 @@ func (s *Service) Start(ctx context.Context, request domainrecovery.CameraReques
 	if err := request.Validate(); err != nil {
 		return nil, err
 	}
-	return s.production.Engine.StartOrLoad(
-		ctx, domainrecovery.CameraExecutionID(request), map[string]any{"request": request}, adgo.BudgetLimit{},
-	)
+	id := domainrecovery.CameraExecutionID(request)
+	resource := cameraResourceKey(request.CameraID)
+
+	s.startMu.Lock()
+	defer s.startMu.Unlock()
+	if err := resourceguard.Check(ctx, s.production.Store, PlanID, id, resource, persistedCameraResource); err != nil {
+		return nil, err
+	}
+	return s.production.Engine.StartOrLoad(ctx, id, map[string]any{"request": request}, adgo.BudgetLimit{})
+}
+
+func cameraResourceKey(cameraID string) string {
+	return "camera-recovery:" + strings.TrimSpace(cameraID)
+}
+
+func persistedCameraResource(execution *adgo.Execution) (string, error) {
+	raw, ok := execution.Data["request"]
+	if !ok {
+		return "", fmt.Errorf("camera recovery: persisted request is missing")
+	}
+	var request domainrecovery.CameraRequest
+	if err := json.Unmarshal(raw, &request); err != nil {
+		return "", fmt.Errorf("camera recovery: decode persisted request: %w", err)
+	}
+	if strings.TrimSpace(request.CameraID) == "" {
+		return "", fmt.Errorf("camera recovery: persisted camera id is empty")
+	}
+	return cameraResourceKey(request.CameraID), nil
 }
 
 func (s *Service) Drive(ctx context.Context, executionID string) (*adgo.Execution, error) {

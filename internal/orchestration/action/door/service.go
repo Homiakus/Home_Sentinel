@@ -2,9 +2,13 @@ package door
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
+	"sync"
 
 	domainaction "github.com/Homiakus/Home_Sentinel/internal/domain/action"
+	"github.com/Homiakus/Home_Sentinel/internal/orchestration/resourceguard"
 	"github.com/Homiakus/axiom/adgo"
 )
 
@@ -21,6 +25,12 @@ func DefaultConfig(root string) Config {
 type Service struct {
 	production *adgo.Production
 	worker     adgo.WorkerSpec
+
+	// startMu makes resourceguard.Check + StartOrLoad one process-local critical
+	// section. The durable execution itself is the reservation across restarts.
+	// Stage 24 still requires a single-writer process lock (or true distributed
+	// fencing) before multi-process control plane is supported.
+	startMu sync.Mutex
 }
 
 func Open(config Config, deps Dependencies) (*Service, error) {
@@ -54,9 +64,32 @@ func (s *Service) Start(ctx context.Context, request domainaction.DoorRequest) (
 	if err := request.Validate(); err != nil {
 		return nil, err
 	}
-	return s.production.Engine.StartOrLoad(
-		ctx, domainaction.DoorExecutionID(request), map[string]any{"request": request}, adgo.BudgetLimit{},
-	)
+	id := domainaction.DoorExecutionID(request)
+	resource := doorResourceKey(request.DoorID)
+
+	s.startMu.Lock()
+	defer s.startMu.Unlock()
+	if err := resourceguard.Check(ctx, s.production.Store, PlanID, id, resource, persistedDoorResource); err != nil {
+		return nil, err
+	}
+	return s.production.Engine.StartOrLoad(ctx, id, map[string]any{"request": request}, adgo.BudgetLimit{})
+}
+
+func doorResourceKey(doorID string) string { return "door:" + strings.TrimSpace(doorID) }
+
+func persistedDoorResource(execution *adgo.Execution) (string, error) {
+	raw, ok := execution.Data["request"]
+	if !ok {
+		return "", fmt.Errorf("door action: persisted request is missing")
+	}
+	var request domainaction.DoorRequest
+	if err := json.Unmarshal(raw, &request); err != nil {
+		return "", fmt.Errorf("door action: decode persisted request: %w", err)
+	}
+	if strings.TrimSpace(request.DoorID) == "" {
+		return "", fmt.Errorf("door action: persisted door id is empty")
+	}
+	return doorResourceKey(request.DoorID), nil
 }
 
 func (s *Service) Drive(ctx context.Context, executionID string) (*adgo.Execution, error) {

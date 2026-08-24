@@ -8,7 +8,10 @@ import (
 	"github.com/Homiakus/Home_Sentinel/internal/domain/artifact"
 )
 
-var ErrMissingIdempotencyKey = errors.New("gateway: idempotency key is required")
+var (
+	ErrMissingExecutionID    = errors.New("gateway: execution id is required")
+	ErrMissingIdempotencyKey = errors.New("gateway: idempotency key is required")
+)
 
 type Operation struct {
 	ExecutionID    string `json:"executionId"`
@@ -16,6 +19,9 @@ type Operation struct {
 }
 
 func (o Operation) Validate() error {
+	if strings.TrimSpace(o.ExecutionID) == "" {
+		return ErrMissingExecutionID
+	}
 	if strings.TrimSpace(o.IdempotencyKey) == "" {
 		return ErrMissingIdempotencyKey
 	}
