@@ -29,9 +29,16 @@ Cameras / Sensors / Home Assistant / Intercom
 - **ADGO** — durable workflow: корреляция evidence, risk evaluation, уведомление, ожидание решения пользователя, recovery/reconciliation.
 - **Media/CV plane не зависит от Axiom/ADGO** и передаёт в control plane только нормализованные события и ссылки на artifacts.
 - Внешние эффекты выполняются только через gateway-слой с idempotency/reconciliation.
+- Пользовательские автоматизации будут строиться через canonical **Scenario AST + Scenario/Safety Compiler**, а не напрямую через raw Axiom/ADGO graphs.
 
-## Статус
+## Планы и статус
 
-Репозиторий стартует с архитектурного каркаса. Подробный поэтапный план внедрения: [`docs/AXIOM_IMPLEMENTATION_PLAN.md`](docs/AXIOM_IMPLEMENTATION_PLAN.md).
+Единый индекс engineering plans: [`docs/PLAN_INDEX.md`](docs/PLAN_INDEX.md).
+
+Основной production roadmap: [`docs/AXIOM_IMPLEMENTATION_PLAN.md`](docs/AXIOM_IMPLEMENTATION_PLAN.md).
+
+Подробный roadmap удобного создания сценариев: [`docs/SCENARIO_SYSTEM_PLAN.md`](docs/SCENARIO_SYSTEM_PLAN.md).
+
+Текущий реализованный baseline: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
 
 Архитектурный контракт: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
