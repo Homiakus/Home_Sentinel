@@ -61,6 +61,7 @@ type DoorController interface {
 }
 
 type SirenController interface {
+	Enabled(context.Context, string) (bool, error)
 	SetEnabled(context.Context, Operation, string, bool) (EffectResult, error)
 }
 
