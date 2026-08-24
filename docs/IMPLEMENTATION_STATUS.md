@@ -1,29 +1,38 @@
 # Implementation status
 
-## Completed
+## Current main baseline
 
-- Stage 0 — architecture boundary, ADR, detailed plan.
-- Stage 1 — Go baseline, event/incident/artifact contracts and unit tests.
-- Stage 2 — gateway contracts with desired-state and explicit effect semantics.
-- Stage 3 — Camera lifecycle implemented with ordinary Axiom behind an adapter service.
-- Stage 4 — ADGO Incident graph, typed activities, StartOrLoad dedup, durable waits and duplicate-signal tests.
-- Stage 5 — production wiring plus Pebble close/reopen continuation test.
-- Stage 6 — explainable deterministic `risk-v2` and explicit low/medium/high ADGO routing.
-- Stage 7 — durable high-risk owner decisions with persisted actor/reason/payload.
-- Stage 8 — door and siren physical effects use desired state, idempotency/reconciliation, human gates and fail-safe compensation.
-- Stage 9 — bounded temporal correlation with dedup, lateness rules, cross-camera context and concurrency coverage.
-- Stage 10 — bounded camera recovery graph with verification and operator escalation.
+- Stage 0 — architecture boundary, ADR and dependency direction.
+- Stage 1 — Go/domain/event/incident/artifact baseline.
+- Stage 2 — gateway desired-state/idempotency contracts and fakes.
+- Stage 3 — Camera lifecycle on ordinary Axiom behind adapter service.
+- Stage 4 — durable Incident ADGO graph with StartOrLoad and waits.
+- Stage 5 — production ADGO wiring and Pebble reopen continuation test.
+- Stage 6 — deterministic explainable risk-v2 and explicit routing.
+- Stage 7 — durable owner human decisions with audit actor/reason/payload.
+- Stage 8 — door/siren desired-state workflows, reconciliation and compensation.
+- Stage 9 — bounded temporal correlation, duplicate/late/out-of-order handling.
+- Stage 10 — bounded camera recovery graph and operator escalation.
 - Stage 11 — operator read model, durable timeline, Explain and Diagnostics.
-- Stage 12.1 — callback token authentication uses HMAC-SHA256, constant-time verification and expiry.
-- Stage 12.2 — bounded replay guard is implemented as edge defense; ADGO SeenEvents remains durable semantic deduplication.
-- Stage 12.3 — explicit threat model documents trust boundaries, authority and remaining deployment risks.
-- Stage 13.1 — benchmark harness exists for correlation and risk hot paths.
-- Stage 13.2 — CI runs module verification, format, vet, unit, race and benchmark smoke checks.
+- Stage 12 — threat model; HMAC callbacks; key ID, iat/exp/maxTTL/skew; keyring rotation overlap; bounded replay guard.
+- Stage 13 — correlation/risk/callback benchmarks; CI module verify, fmt, vet, unit, race and benchmark smoke.
 
-## Remaining production work
+## Important audit findings
 
-- Real camera/RTSP, Home Assistant, notification and hardware gateway adapters.
-- Authenticated HTTP/TLS ingress, user authorization/RBAC and key rotation.
-- Target-hardware benchmark baseline and numeric regression thresholds.
-- Cross-platform/system integration tests with actual devices.
-- Observe/fix the push CI run once GitHub connector exposes it; the available workflow-run wrapper filters to pull-request runs and currently returns no push run.
+1. P0: ADGO node ResourceKeys do not by themselves prove global same-device serialization across independent executions. Stage 20 adds durable dynamic resource admission.
+2. P0: repository still has no committed `go.sum`; CI cache is intentionally disabled until Stage 14 creates the reproducible module lock.
+3. P0: callback crypto exists, but authenticated ingress + RBAC + binding to actual waiting workflow node are not yet wired.
+4. P0: plan/schema migration policy, backup/restore and release rollback were absent from the original plan and are now explicit stages.
+5. P1: observability currently exposes read-model diagnostics but not metrics/SLO/exporters/runbooks.
+
+## Next implementation order
+
+1. Stage 20 — global physical resource admission/fencing.
+2. Stage 14 — `go.sum`, module hygiene and supply-chain gates from a clean Go environment.
+3. Stage 16/17 — typed config, secret/key loading, authenticated ingress and RBAC.
+4. Stage 15 — plan/schema catalog and migration compatibility.
+5. Stage 18/23/24 — backup/restore, exhaustive crash matrix, backpressure/degraded mode.
+6. Stage 21/22/26 — real adapters, observability and target-hardware budgets.
+7. Stage 27 — release/upgrade/rollback gates.
+
+Full audited plan: `docs/AXIOM_IMPLEMENTATION_PLAN.md`.
