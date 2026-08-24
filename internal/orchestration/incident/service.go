@@ -25,6 +25,7 @@ func DefaultConfig(root string) Config {
 
 type Service struct {
 	production *adgo.Production
+	plan       *adgo.Plan
 	worker     adgo.WorkerSpec
 }
 
@@ -47,6 +48,7 @@ func Open(config Config, deps Dependencies) (*Service, error) {
 	}
 	return &Service{
 		production: production,
+		plan:       plan,
 		worker:     adgo.WorkerSpec{ID: workerID, Concurrency: concurrency},
 	}, nil
 }
