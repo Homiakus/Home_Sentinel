@@ -65,6 +65,12 @@ type SirenController interface {
 	SetEnabled(context.Context, Operation, string, bool) (EffectResult, error)
 }
 
+type CameraRecoveryController interface {
+	ProbeNetwork(context.Context, string) (bool, error)
+	ProbeStream(context.Context, string) (bool, error)
+	Reconnect(context.Context, Operation, string) (EffectResult, error)
+}
+
 type ArtifactStore interface {
 	Put(context.Context, Operation, string, []byte) (artifact.Ref, error)
 	Get(context.Context, artifact.Ref) ([]byte, error)

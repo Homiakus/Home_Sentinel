@@ -10,16 +10,16 @@
 - Stage 5 — production wiring plus Pebble close/reopen continuation test.
 - Stage 6 — explainable deterministic `risk-v2` and explicit low/medium/high ADGO routing.
 - Stage 7 — durable high-risk owner decisions with persisted actor/reason/payload.
-- Stage 8.1 — door desired-state workflow with stable operation IDs and read/verify boundaries.
-- Stage 8.2 — unlock requires high-risk human approval; ambiguous door I/O uses durable reconciliation.
-- Stage 8.3 — siren activation has a mandatory bounded timer and an idempotent ensure-disabled compensation.
-- Stage 8.4 — cancellation/manual override invokes compensation, so the safe terminal physical state is siren-off.
+- Stage 8 — door and siren physical effects use desired state, idempotency/reconciliation, human gates and fail-safe compensation.
 - Stage 9 — bounded temporal correlation with dedup, lateness rules, cross-camera context and concurrency coverage.
+- Stage 10.1 — camera recovery is invoked as a stateful ADGO workflow, not for simple heartbeat polling.
+- Stage 10.2 — network/stream probes are facts; deterministic decisions select healthy, reconnect or operator branches.
+- Stage 10.3 — reconnect has bounded retry/idempotency and verification; unresolved recovery escalates to a durable operator decision.
+- Stage 10.4 — operator retry is a single explicit second-attempt subgraph, avoiding an unbounded recovery cycle.
 - CI — format, vet, unit and race commands configured for every push to main/PR.
 
 ## Next
 
 1. Observe/fix CI result when the connector exposes the push workflow run.
-2. Add health/recovery workflows.
-3. Add observability/API and operator read model.
-4. Add security hardening and performance gates.
+2. Add observability/API and operator read model.
+3. Add security hardening and performance gates.
