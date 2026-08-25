@@ -19,17 +19,18 @@
 - Stage 16a — typed fail-closed configuration and secret-reference loading baseline exists.
 - Stage 20a — single-writer durable resource reservation: Door, Siren and Camera Recovery reject a second non-terminal execution for the same physical resource; different resources remain parallel; terminal executions release ownership; concurrent Start race is covered.
 - Stage 28 — Canonical Scenario Model: strict headless AST, stable scenario/revision/step identity, typed capability references, semantic flow nodes, strict decode, deterministic normalization and semantic digest, clone-to-draft, nested duplicate detection and fuzz baseline.
+- Stage 29 — Capability Registry: versioned capability descriptors, entity/device binding, risk/permission/visibility metadata, schemas/UI hints, health without deletion, compatible resolution, dependency-protected removal, deterministic snapshot/digest and discovery filters.
 
 ## Scenario authoring audit
 
-Текущий runtime существенно сильнее authoring UX: до Stage 28 новые workflows определялись только через Go `CompilePlan()`. Canonical Scenario AST теперь заложен как source of truth, но capability discovery/compiler/catalog/UI ещё не реализованы.
+Canonical Scenario AST and Capability Registry are now present as headless product foundation. Scenario compiler, full typed/temporal semantics, immutable catalog, simulator and UI remain open.
 
-Официальный product track: [`SCENARIO_SYSTEM_PLAN.md`](SCENARIO_SYSTEM_PLAN.md).
+Official product track: [`SCENARIO_SYSTEM_PLAN.md`](SCENARIO_SYSTEM_PLAN.md).
 
 Stages 28-42:
 
 - 28 — Canonical Scenario Model — **implemented baseline**;
-- 29 — Capability Registry;
+- 29 — Capability Registry — **implemented baseline**;
 - 30 — typed expressions + temporal semantics;
 - 31 — automatic Scenario -> Axiom/ADGO compiler;
 - 32 — mandatory Safety Compiler;
@@ -44,7 +45,7 @@ Stages 28-42:
 - 41 — mobile/adaptive authoring;
 - 42 — scenario quality/security/release gates.
 
-Scenario AST, UI и AI layer не заменяют Axiom/ADGO и не обходят gateway/RBAC/resource ownership.
+Scenario AST, UI and AI layer do not replace Axiom/ADGO and cannot bypass gateway/RBAC/resource ownership.
 
 ## Important audit findings
 
@@ -53,7 +54,8 @@ Scenario AST, UI и AI layer не заменяют Axiom/ADGO и не обход
 3. P0: callback crypto exists, but authenticated ingress + RBAC + binding to actual waiting workflow node are not yet wired in guaranteed `main` baseline.
 4. P0: plan/schema migration policy, backup/restore and release rollback remain required production stages.
 5. P1: observability currently exposes read-model diagnostics but not full metrics/SLO/exporters/runbooks.
-6. Scenario Stage 28 is headless only. Physical scenario publication remains blocked on Stage 17 RBAC plus Stages 31-33 Safety Compiler/catalog integration.
+6. Capability Registry deliberately treats provider offline as health/availability state, not deletion; scenario publication still requires compiler/catalog integration.
+7. Capability removal fails closed without a dependency resolver and is blocked while entities or scenarios reference it.
 
 ## Next implementation order
 
@@ -66,16 +68,15 @@ Core production safety:
 
 Scenario product foundation can proceed in parallel where it does not weaken production gates:
 
-5. Stage 29 — Capability Registry.
-6. Stage 30 — typed expressions/temporal semantics.
-7. Stage 31/32 — Scenario Compiler + Safety Compiler.
-8. Stage 33/34 — immutable catalog + simulator.
-9. Stage 35+ — authenticated API, then Simple Builder/Graph/Templates/Trace/AI.
+5. Stage 30 — typed expressions/temporal semantics.
+6. Stage 31/32 — Scenario Compiler + Safety Compiler.
+7. Stage 33/34 — immutable catalog + simulator.
+8. Stage 35+ — authenticated API, then Simple Builder/Graph/Templates/Trace/AI.
 
 Integration/release:
 
-10. Stage 21/22/26 — real adapters, observability and target-hardware budgets.
-11. Stage 27 + Scenario Stage 42 — release/upgrade/rollback and scenario release gates.
+9. Stage 21/22/26 — real adapters, observability and target-hardware budgets.
+10. Stage 27 + Scenario Stage 42 — release/upgrade/rollback and scenario release gates.
 
 Index: `docs/PLAN_INDEX.md`.
 Master production plan: `docs/AXIOM_IMPLEMENTATION_PLAN.md`.
