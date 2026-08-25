@@ -1,0 +1,1 @@
+{"schema":1,"id":"dahua","manufacturer_match":["dahua"],"rtsp_hints":[{"name":"main","path":"/cam/realmonitor?channel=1&subtype=0","role":"main"},{"name":"sub","path":"/cam/realmonitor?channel=1&subtype=1","role":"detect"}]}

@@ -42,6 +42,14 @@ func TestSirenAutomaticallyStopsAtSafetyDeadline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("drive: %v", err)
 	}
+	if execution.Status != adgo.StatusWaiting {
+		t.Fatalf("expected waiting on safety timer, got %s", execution.Status)
+	}
+	time.Sleep(25 * time.Millisecond)
+	execution, err = service.Drive(ctx, execution.ID)
+	if err != nil {
+		t.Fatalf("drive after timer: %v", err)
+	}
 	if execution.Status != adgo.StatusCompleted {
 		t.Fatalf("expected completed, got %s", execution.Status)
 	}
@@ -78,12 +86,23 @@ func TestManualStopUsesCompensation(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	stopped, err := service.Stop(context.Background(), execution.ID, "manual override")
+	_, err = service.Stop(context.Background(), execution.ID, "manual override")
 	if err != nil {
 		t.Fatalf("stop: %v", err)
 	}
-	if stopped.Status != adgo.StatusCanceled {
-		t.Fatalf("expected canceled execution, got %s", stopped.Status)
+	deadline = time.Now().Add(time.Second)
+	for {
+		stopped, getErr := service.Get(context.Background(), execution.ID)
+		if getErr == nil && (stopped.Status == adgo.StatusCanceled || stopped.Status == adgo.StatusFailed) {
+			if stopped.Status != adgo.StatusCanceled {
+				t.Fatalf("expected canceled execution, got %s", stopped.Status)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("worker did not cancel execution before deadline")
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 	enabled, _ := controller.Enabled(context.Background(), "main")
 	if enabled {

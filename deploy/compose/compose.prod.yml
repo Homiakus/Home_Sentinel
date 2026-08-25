@@ -1,0 +1,125 @@
+services:
+  mqtt-bootstrap:
+    image: ${MOSQUITTO_IMAGE:?set MOSQUITTO_IMAGE to an exact version or digest}
+    restart: "no"
+    entrypoint: ["/bin/sh", "/bootstrap/bootstrap-passwords.sh", "/mosquitto/runtime/passwords"]
+    environment:
+      SENTINEL_MQTT_PASSWORD_FILE: /run/secrets/sentinel_mqtt_password
+      FRIGATE_MQTT_PASSWORD_FILE: /run/secrets/frigate_mqtt_password
+      HOMEASSISTANT_MQTT_PASSWORD_FILE: /run/secrets/homeassistant_mqtt_password
+    secrets:
+      - sentinel_mqtt_password
+      - frigate_mqtt_password
+      - homeassistant_mqtt_password
+    volumes:
+      - ../mosquitto:/bootstrap:ro
+      - mosquitto_runtime:/mosquitto/runtime
+
+  mosquitto:
+    image: ${MOSQUITTO_IMAGE:?set MOSQUITTO_IMAGE to an exact version or digest}
+    restart: unless-stopped
+    command: ["mosquitto", "-c", "/mosquitto/config/mosquitto.conf"]
+    volumes:
+      - ../mosquitto:/mosquitto/config:ro
+      - mosquitto_runtime:/mosquitto/runtime:ro
+      - mosquitto_data:/mosquitto/data
+    networks: [control]
+    depends_on:
+      mqtt-bootstrap:
+        condition: service_completed_successfully
+
+  sentinel:
+    image: ${SENTINEL_IMAGE:?set SENTINEL_IMAGE to an exact version or digest}
+    restart: unless-stopped
+    ports:
+      - "${SENTINEL_BIND_IP:-127.0.0.1}:8080:8080"
+    environment:
+      SENTINEL_LISTEN: 0.0.0.0:8080
+      SENTINEL_DB_PATH: /var/lib/home-sentinel/sentinel.db
+      SENTINEL_CONFIG: /etc/home-sentinel/config.json
+      SENTINEL_FRIGATE_CREDENTIALS_DIR: /var/lib/home-sentinel/frigate-secrets
+      SENTINEL_GO2RTC_URL: http://frigate:1984
+      SENTINEL_FRIGATE_WEBRTC_CANDIDATES: ${FRIGATE_WEBRTC_CANDIDATES:?set FRIGATE_WEBRTC_CANDIDATES, e.g. 192.168.1.10:8555}
+    volumes:
+      - sentinel_data:/var/lib/home-sentinel
+      - frigate_credentials:/var/lib/home-sentinel/frigate-secrets
+      - ./config.json:/etc/home-sentinel/config.json:ro
+      # Grant specific /dev/dri, /dev/video*, SMART capabilities only on hosts
+      # that need them. Never mount the Docker socket or all of /dev.
+    networks: [control, app_egress, camera_egress]
+    depends_on:
+      mosquitto:
+        condition: service_started
+
+  homeassistant:
+    image: ${HOMEASSISTANT_IMAGE:?set HOMEASSISTANT_IMAGE to an exact version or digest}
+    restart: unless-stopped
+    ports:
+      - "${HOMEASSISTANT_BIND_IP:-127.0.0.1}:8123:8123"
+    volumes:
+      - homeassistant_config:/config
+      - /etc/localtime:/etc/localtime:ro
+    networks: [control, app_egress]
+
+  frigate:
+    image: ${FRIGATE_IMAGE:?set FRIGATE_IMAGE to an exact version or digest}
+    restart: unless-stopped
+    shm_size: "256mb"
+    ports:
+      - "${FRIGATE_WEBRTC_BIND_IP:?set FRIGATE_WEBRTC_BIND_IP to the trusted LAN/VPN host IP}:8555:8555/tcp"
+      - "${FRIGATE_WEBRTC_BIND_IP:?set FRIGATE_WEBRTC_BIND_IP to the trusted LAN/VPN host IP}:8555:8555/udp"
+    volumes:
+      - frigate_config:/config
+      - frigate_media:/media/frigate
+      - frigate_credentials:/run/secrets:ro
+    networks: [control, camera_egress]
+
+  ollama:
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE to an exact version or digest}
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    networks: [control]
+
+networks:
+  # Internal service-to-service plane. No direct Internet egress.
+  control:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${SENTINEL_CONTROL_SUBNET:-172.30.250.0/24}
+
+  # Internet/LAN egress for Sentinel (Telegram/offsite backup) and Home
+  # Assistant integrations. HS-127 will generate host firewall rules.
+  app_egress:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${SENTINEL_APP_EGRESS_SUBNET:-172.30.251.0/24}
+
+  # Dedicated egress plane for camera traffic. Sentinel needs it for camera
+  # discovery/probing; Frigate needs it for RTSP/ONVIF. Host/router firewall
+  # must allow only configured camera VLAN/CIDRs and deny WAN egress.
+  camera_egress:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${SENTINEL_CAMERA_EGRESS_SUBNET:-172.30.252.0/24}
+
+volumes:
+  sentinel_data:
+  frigate_credentials:
+  mosquitto_runtime:
+  mosquitto_data:
+  homeassistant_config:
+  frigate_config:
+  frigate_media:
+  ollama_data:
+
+secrets:
+  sentinel_mqtt_password:
+    file: ${SENTINEL_MQTT_PASSWORD_FILE:?set SENTINEL_MQTT_PASSWORD_FILE}
+  frigate_mqtt_password:
+    file: ${FRIGATE_MQTT_PASSWORD_FILE:?set FRIGATE_MQTT_PASSWORD_FILE}
+  homeassistant_mqtt_password:
+    file: ${HOMEASSISTANT_MQTT_PASSWORD_FILE:?set HOMEASSISTANT_MQTT_PASSWORD_FILE}

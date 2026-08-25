@@ -1,0 +1,11 @@
+services:
+  sentinel:
+    build:
+      context: ../..
+      dockerfile: deploy/compose/Dockerfile
+    command: ["serve"]
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      SENTINEL_ENV: development
+      SENTINEL_LISTEN: 0.0.0.0:8080

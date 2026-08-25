@@ -1,0 +1,1 @@
+{"schema":1,"id":"reolink","manufacturer_match":["reolink"],"rtsp_hints":[{"name":"main-preview","path":"/Preview_01_main","role":"main"},{"name":"sub-preview","path":"/Preview_01_sub","role":"detect"},{"name":"legacy-main","path":"/h264Preview_01_main","role":"main"},{"name":"legacy-sub","path":"/h264Preview_01_sub","role":"detect"}]}

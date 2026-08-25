@@ -1,0 +1,30 @@
+{
+  "version": "1.0.0",
+  "min_current_version": "1.0.0",
+  "schema_target": 7,
+  "min_readable_schema": 7,
+  "irreversible": false,
+  "components": {
+    "sentinel": {
+      "ref": "registry.example.invalid/sentinel:1.0.0",
+      "required": true
+    },
+    "mosquitto": {
+      "ref": "registry.example.invalid/mosquitto:1.0.0",
+      "required": true
+    },
+    "homeassistant": {
+      "ref": "registry.example.invalid/homeassistant:1.0.0",
+      "required": true
+    },
+    "frigate": {
+      "ref": "registry.example.invalid/frigate:1.0.0",
+      "required": true
+    },
+    "ollama": {
+      "ref": "registry.example.invalid/ollama:1.0.0",
+      "required": false
+    }
+  },
+  "notes": "Illustrative only. Replace every component ref with a reviewed exact tag or digest from your release inventory."
+}

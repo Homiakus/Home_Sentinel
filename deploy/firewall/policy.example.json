@@ -1,0 +1,8 @@
+{
+  "trusted_cidrs": ["192.168.1.0/24", "100.64.0.0/10"],
+  "camera_cidrs": ["192.168.30.0/24"],
+  "camera_egress_cidrs": ["172.30.252.0/24"],
+  "sentinel_port": 8080,
+  "webrtc_port": 8555,
+  "enforce_camera_egress": true
+}

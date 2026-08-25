@@ -1,0 +1,9 @@
+# Generated/reference file. No secrets belong here.
+group:
+  home_sentinel_status:
+    name: Home Sentinel
+    entities:
+      - sensor.home_sentinel_system_health
+      - sensor.home_sentinel_recording_disk_free
+      - sensor.home_sentinel_ai_status
+      - sensor.home_sentinel_backup_status

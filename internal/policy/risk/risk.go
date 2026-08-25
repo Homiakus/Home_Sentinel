@@ -99,9 +99,20 @@ func (p Policy) Assess(f Features) (Assessment, error) {
 		contrib["evidence"] = 0.05 * math.Min(1, float64(f.EvidenceCount)/3)
 	}
 
+	keys := make([]string, 0, len(contrib))
+	for k := range contrib {
+		keys = append(keys, k)
+	}
+	for i := 0; i < len(keys)-1; i++ {
+		for j := i + 1; j < len(keys); j++ {
+			if keys[i] > keys[j] {
+				keys[i], keys[j] = keys[j], keys[i]
+			}
+		}
+	}
 	score := 0.0
-	for _, value := range contrib {
-		score += value
+	for _, k := range keys {
+		score += contrib[k]
 	}
 	score = math.Min(1, math.Max(0, score))
 

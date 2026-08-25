@@ -1,0 +1,5 @@
+# Substitute DEVICE_ID and USERNAME only with validated [a-z0-9_-] identifiers.
+user USERNAME
+topic write sentinel/intercom/DEVICE_ID/state/#
+topic write sentinel/intercom/DEVICE_ID/event/#
+topic read sentinel/intercom/DEVICE_ID/command/#

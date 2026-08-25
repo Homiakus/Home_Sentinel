@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "manufacturer_match": ["*"],
+  "rtsp_hints": [],
+  "note": "Generic profile intentionally does not guess a vendor-specific RTSP path."
+}

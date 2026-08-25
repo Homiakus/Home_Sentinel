@@ -1,0 +1,1 @@
+{"schema":1,"id":"hikvision","manufacturer_match":["hikvision"],"rtsp_hints":[{"name":"main","path":"/Streaming/Channels/101","role":"main"},{"name":"sub","path":"/Streaming/Channels/102","role":"detect"}]}

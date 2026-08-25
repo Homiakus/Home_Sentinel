@@ -108,9 +108,6 @@ func (s *Service) Stop(ctx context.Context, executionID, reason string) (*adgo.E
 	if _, err := s.production.Engine.Cancel(ctx, executionID, reason); err != nil {
 		return nil, err
 	}
-	if _, err := s.production.Engine.Advance(ctx, executionID); err != nil {
-		return nil, err
-	}
 	return s.production.Engine.Get(ctx, executionID)
 }
 

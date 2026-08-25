@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "generated_at": "2026-08-17T00:00:00Z",
+  "checks": [
+    {"id":"GO_TARGET","name":"Go 1.26.6 build/vet/race tests","mandatory":true,"status":"PENDING"},
+    {"id":"SECURITY","name":"Security regression and vulnerability scans","mandatory":true,"status":"PENDING"},
+    {"id":"PACKAGE","name":"Production packaging validation","mandatory":true,"status":"PENDING"},
+    {"id":"RESTORE","name":"Backup and restore qualification","mandatory":true,"status":"PENDING"},
+    {"id":"CAMERA_HIL","name":"Real ONVIF + generic RTSP camera HIL","mandatory":true,"status":"PENDING"},
+    {"id":"INTERCOM_HIL","name":"Physical doorbell/door/lock HIL","mandatory":true,"status":"PENDING"},
+    {"id":"REBOOT_HIL","name":"Host reboot and automatic recovery","mandatory":true,"status":"PENDING"},
+    {"id":"SOAK_72H","name":"72-hour production-like soak","mandatory":true,"status":"PENDING"}
+  ]
+}

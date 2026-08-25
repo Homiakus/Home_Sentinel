@@ -1,0 +1,14 @@
+{
+  "name": "p12-dashboard-managed-live",
+  "based_on_source_commit": "64553a1ff0e48d2dc534d8ac4c66d3c2fc75e05d",
+  "implementation_plan_tasks": {
+    "baseline_complete": ["HS-088", "HS-103", "HS-107", "HS-108", "HS-109", "HS-110", "HS-111", "HS-112", "HS-113", "HS-114", "HS-115", "HS-116"],
+    "still_pending_technology_specific": ["HS-028", "HS-033"],
+    "next_major": ["HS-127", "HS-133", "HS-134", "HS-140", "HS-141", "HS-142", "HS-143", "HS-145", "HS-146"]
+  },
+  "notes": [
+    "Frigate semantic search adapter remains optional pending an explicitly selected stable public API contract.",
+    "Two-way talk requires production HTTPS and reachable configured WebRTC candidates.",
+    "Target Go 1.26.6 CI and real hardware/browser soak are not executable in this sandbox."
+  ]
+}

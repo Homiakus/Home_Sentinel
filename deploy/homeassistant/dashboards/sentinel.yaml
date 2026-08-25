@@ -1,0 +1,13 @@
+title: Home Sentinel
+views:
+  - title: Security
+    path: sentinel
+    icon: mdi:shield-home
+    cards:
+      - type: entities
+        title: System
+        entities:
+          - sensor.home_sentinel_system_health
+          - sensor.home_sentinel_recording_disk_free
+          - sensor.home_sentinel_ai_status
+          - sensor.home_sentinel_backup_status

@@ -1,0 +1,5 @@
+{
+  "schema": 1,
+  "description": "Fallback hints only. ONVIF-advertised and user-supplied stream URIs always take precedence.",
+  "fields": ["manufacturer_match", "rtsp_hints"]
+}

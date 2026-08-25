@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#090d14">
+  <title>Home Sentinel — Безопасность и Видеонаблюдение</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <!-- Auth / First Setup Screen -->
+  <div id="auth-screen" class="auth-screen hidden">
+    <div class="auth-backdrop"></div>
+    <form id="auth-form" class="auth-card">
+      <div class="auth-header">
+        <div class="brand-shield">
+          <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><circle cx="12" cy="11" r="3"/><path d="M12 14v3"/></svg>
+        </div>
+        <h1 id="auth-title">Home Sentinel</h1>
+        <p id="auth-subtitle" class="muted">Локальный центр управления безопасностью</p>
+      </div>
+      <div class="auth-fields">
+        <div class="form-group">
+          <label for="auth-user">Имя пользователя</label>
+          <div class="input-wrapper">
+            <svg class="input-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <input id="auth-user" autocomplete="username" placeholder="admin" required autofocus>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="auth-pass">Пароль</label>
+          <div class="input-wrapper">
+            <svg class="input-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input id="auth-pass" type="password" autocomplete="current-password" placeholder="••••••••••••" minlength="12" required>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-block" type="submit" id="auth-submit-btn">
+        <span>Войти в систему</span>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+      </button>
+      <p id="auth-error" class="error-banner hidden"></p>
+      <div class="auth-footer">
+        <span class="safe-badge"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> 100% Local-First &bull; Encrypted Sessions</span>
+      </div>
+    </form>
+  </div>
+
+  <!-- Main App Shell -->
+  <div id="app" class="app-shell hidden">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <a class="brand-link" href="#overview">
+          <div class="brand-logo">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><circle cx="12" cy="11" r="2.5"/></svg>
+          </div>
+          <div class="brand-text">
+            <span class="brand-name">SENTINEL</span>
+            <span class="brand-edition">v1.0 Local</span>
+          </div>
+        </a>
+      </div>
+
+      <nav id="nav" class="nav-menu">
+        <a href="#overview" data-route="overview" class="nav-item active">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+          <span>Обзор</span>
+        </a>
+        <a href="#cameras" data-route="cameras" class="nav-item">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
+          <span>Камеры</span>
+          <span id="nav-camera-count" class="counter-badge">0</span>
+        </a>
+        <a href="#entrance" data-route="entrance" class="nav-item">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M3 7h18M6 7v14M18 7v14M10 14h1"/></svg>
+          <span>Вход и Замок</span>
+        </a>
+        <a href="#events" data-route="events" class="nav-item">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6M9 15h6"/></svg>
+          <span>События</span>
+        </a>
+        <a href="#incidents" data-route="incidents" class="nav-item">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span>Инциденты</span>
+        </a>
+        <a href="#search" data-route="search" class="nav-item">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span>Поиск</span>
+        </a>
+        <a href="#system" data-route="system" class="nav-item">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+          <span>Система</span>
+        </a>
+        <a href="#setup" data-route="setup" class="nav-item">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+          <span>Мастер</span>
+        </a>
+        <a href="#settings" data-route="settings" class="nav-item">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>Настройки</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="system-status-card">
+          <div class="status-header">
+            <span class="status-indicator-dot healthy" id="status-dot"></span>
+            <span id="overall-health-text" class="status-text">HEALTHY</span>
+          </div>
+          <div class="user-row">
+            <span id="user-display" class="user-display">admin</span>
+            <button id="logout" class="icon-btn-text" title="Выйти">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <button id="menu-button" class="btn btn-icon mobile-menu-toggle" aria-label="Меню">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div class="page-title-wrap">
+          <h2 id="page-title">Обзор</h2>
+          <span id="page-subtitle" class="page-subtitle"></span>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <div id="realtime-state" class="realtime-pill">
+          <span class="pulse-dot"></span>
+          <span>Live Stream</span>
+        </div>
+        <button id="quick-search-btn" class="btn btn-ghost btn-sm" title="Быстрый поиск">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span class="search-hint">Поиск</span>
+        </button>
+        <button id="refresh" class="btn btn-ghost btn-sm" title="Обновить">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          <span>Обновить</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main id="content" class="content" aria-live="polite"></main>
+  </div>
+
+  <!-- Toast Notification Stack -->
+  <div id="toast-stack" class="toast-stack"></div>
+
+  <!-- Modal: Step-up Reauthentication -->
+  <dialog id="reauth-dialog" class="modal-dialog">
+    <form method="dialog" id="reauth-form" class="modal-content">
+      <div class="modal-header">
+        <div class="modal-icon warning">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <div>
+          <h3>Подтверждение личности</h3>
+          <p class="muted">Для выполнения опасного действия введите ваш пароль администратора.</p>
+        </div>
+      </div>
+      <div class="form-group" style="margin: 18px 0;">
+        <label for="reauth-password">Пароль</label>
+        <input id="reauth-password" type="password" autocomplete="current-password" placeholder="Введите пароль" required autofocus>
+      </div>
+      <p id="reauth-error" class="error-banner hidden"></p>
+      <div class="modal-actions">
+        <button value="cancel" class="btn btn-ghost" type="button" id="reauth-cancel-btn">Отмена</button>
+        <button value="confirm" class="btn btn-primary" type="submit">Подтвердить</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Modal: Add Camera Wizard (USB / ONVIF / RTSP) -->
+  <dialog id="add-camera-dialog" class="modal-dialog modal-large">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-icon primary">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
+        </div>
+        <div>
+          <h3>Добавить новую камеру</h3>
+          <p class="muted">Выберите тип подключения: локальная USB веб-камера, автопоиск ONVIF или RTSP поток</p>
+        </div>
+        <button class="btn-close" id="add-cam-close" aria-label="Закрыть">&times;</button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="modal-tabs">
+        <button class="tab-btn active" data-tab="uvc">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg>
+          USB / Веб-камера
+        </button>
+        <button class="tab-btn" data-tab="onvif">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg>
+          ONVIF (Автопоиск)
+        </button>
+        <button class="tab-btn" data-tab="rtsp">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          RTSP (Вручную)
+        </button>
+      </div>
+
+      <!-- Tab Content: USB / UVC -->
+      <div id="tab-content-uvc" class="tab-panel active">
+        <div class="scan-bar">
+          <div>
+            <strong>Локальные USB-камеры</strong>
+            <p class="muted">Поиск устройств DirectShow (Windows) / v4l2 (Linux)</p>
+          </div>
+          <button id="btn-scan-uvc" class="btn btn-secondary">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            <span>Сканировать устройства</span>
+          </button>
+        </div>
+
+        <div id="uvc-scan-results" class="device-list">
+          <div class="empty-state">Нажмите «Сканировать устройства» для поиска подключенных USB-камер</div>
+        </div>
+
+        <form id="form-add-uvc" class="camera-form hidden">
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="uvc-cam-name">Название камеры</label>
+              <input id="uvc-cam-name" placeholder="Например: Веб-камера LifeCam" required>
+            </div>
+            <div class="form-group">
+              <label for="uvc-cam-path">Идентификатор устройства</label>
+              <input id="uvc-cam-path" readonly required>
+            </div>
+          </div>
+          <div id="uvc-preview-container" class="preview-box hidden">
+            <div class="preview-header">
+              <span>Тестовый кадр устройства</span>
+              <span id="uvc-snap-badge" class="badge ok">READY</span>
+            </div>
+            <img id="uvc-test-snapshot" class="preview-img" alt="Превью камеры">
+          </div>
+          <div class="modal-actions">
+            <button type="button" id="btn-test-uvc-snap" class="btn btn-secondary">Проверить снимок</button>
+            <button type="submit" class="btn btn-primary">Добавить камеру</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Tab Content: ONVIF -->
+      <div id="tab-content-onvif" class="tab-panel">
+        <div class="scan-bar">
+          <div>
+            <strong>Поиск камер ONVIF по сети</strong>
+            <p class="muted">WS-Discovery в локальной подсети</p>
+          </div>
+          <button id="btn-scan-onvif" class="btn btn-secondary">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span>Начать поиск ONVIF</span>
+          </button>
+        </div>
+
+        <div id="onvif-scan-results" class="device-list">
+          <div class="empty-state">Нажмите «Начать поиск ONVIF» для автоматического обнаружения IP-камер</div>
+        </div>
+
+        <form id="form-add-onvif" class="camera-form hidden">
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="onvif-cam-name">Название</label>
+              <input id="onvif-cam-name" placeholder="Например: Камера Входа" required>
+            </div>
+            <div class="form-group">
+              <label for="onvif-cam-url">URL устройства (Service URL)</label>
+              <input id="onvif-cam-url" placeholder="http://192.168.1.50/onvif/device_service" required>
+            </div>
+            <div class="form-group">
+              <label for="onvif-cam-user">Логин (ONVIF)</label>
+              <input id="onvif-cam-user" placeholder="admin">
+            </div>
+            <div class="form-group">
+              <label for="onvif-cam-pass">Пароль (ONVIF)</label>
+              <input id="onvif-cam-pass" type="password" placeholder="••••••••">
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="submit" class="btn btn-primary">Подключить ONVIF камеру</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Tab Content: RTSP -->
+      <div id="tab-content-rtsp" class="tab-panel">
+        <form id="form-add-rtsp" class="camera-form">
+          <div class="form-grid">
+            <div class="form-group full-width">
+              <label for="rtsp-cam-name">Название камеры</label>
+              <input id="rtsp-cam-name" placeholder="Например: Двор или Гараж" required>
+            </div>
+            <div class="form-group full-width">
+              <label for="rtsp-cam-url">RTSP Stream URL</label>
+              <input id="rtsp-cam-url" placeholder="rtsp://192.168.1.100:554/stream1" required>
+              <small class="muted">Не указывайте логин/пароль в URL — введите их в поля ниже для безопасного хранения в Secret Vault.</small>
+            </div>
+            <div class="form-group">
+              <label for="rtsp-cam-user">Логин</label>
+              <input id="rtsp-cam-user" placeholder="admin">
+            </div>
+            <div class="form-group">
+              <label for="rtsp-cam-pass">Пароль</label>
+              <input id="rtsp-cam-pass" type="password" placeholder="••••••••">
+            </div>
+            <div class="form-group full-width">
+              <label for="rtsp-cam-role">Роль потока</label>
+              <select id="rtsp-cam-role">
+                <option value="main" selected>Основной поток (Main / High-Res)</option>
+                <option value="detect">Поток детекции (Detect / Low-Res)</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="submit" class="btn btn-primary">Подключить RTSP поток</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </dialog>
+
+  <script type="module" src="/assets/app.js"></script>
+</body>
+</html>

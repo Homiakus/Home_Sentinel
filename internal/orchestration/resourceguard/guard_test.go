@@ -71,7 +71,7 @@ func TestCheckFailsClosedOnCorruptOwnerState(t *testing.T) {
 	store := adgo.NewMemoryStore()
 	if err := store.Create(ctx, &adgo.Execution{
 		ID: "corrupt", PlanID: "plan", PlanVersion: "1", PlanDigest: "digest", Version: 1,
-		Status: adgo.StatusWaiting, Data: map[string]json.RawMessage{"request": json.RawMessage("{")},
+		Status: adgo.StatusHuman, Data: map[string]json.RawMessage{"request": json.RawMessage(`{"resource": 12345}`)},
 	}); err != nil {
 		t.Fatal(err)
 	}

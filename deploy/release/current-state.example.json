@@ -1,0 +1,11 @@
+{
+  "version": "1.0.0",
+  "schema_version": 7,
+  "components": {
+    "sentinel": "registry.example.invalid/sentinel:1.0.0",
+    "mosquitto": "registry.example.invalid/mosquitto:1.0.0",
+    "homeassistant": "registry.example.invalid/homeassistant:1.0.0",
+    "frigate": "registry.example.invalid/frigate:1.0.0",
+    "ollama": "registry.example.invalid/ollama:1.0.0"
+  }
+}
