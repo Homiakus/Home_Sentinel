@@ -22,10 +22,15 @@
 - Stage 29 — Capability Registry: versioned capability descriptors, entity/device binding, risk/permission/visibility metadata, typed schemas/UI hints, health without deletion, compatible resolution, dependency-protected removal, deterministic snapshot/digest and discovery filters.
 - Stage 30a — Typed/temporal semantic baseline: canonical typed values and units, TypeRef capability schemas, static expression checking, first-class temporal AST, explicit timezone/DST/catch-up policy and deterministic wall-clock resolution.
 - Stage 30b — Typed expression bindings: ActionStep and SubflowStep arguments upgraded from raw map[string]Value to map[string]Expr with normalization, reference validation, type inference, capability schema compatibility validation, default handling and unknown argument rejection.
+- Stage 31 — Scenario Compiler: pure multi-pass compiler pipeline (Normalize -> Validate -> BuildEnv -> Resolve -> TypeCheck -> Temporal -> SafetyAugment -> StaticConflict -> Classify -> Lower -> Manifest -> Digest), structured diagnostics with HS-SCN-xxx codes, explainable runtime classification.
+- Stage 31a — Axiom Lowering: exact FSM lowering for simple, stateless reactive trigger-action flows with zero overhead.
+- Stage 31b — ADGO Lowering: durable multi-step workflow generation (Activity, Wait, HumanApproval, Fork, Join, Subflow, Gate/Decision, Compensation, ResourceLock).
+- Stage 32 — Safety Compiler: mandatory security boundary generating human approval gates, single-writer resource locks, read-before-write, verify-after-write, maximum duration clamps, and ensure-disabled compensation; separate User Intent Graph and System Graph representations.
+- Stage 32b — Static Conflict Analysis: pre-publish detection of self-recursion, mutual recursion, conflicting desired states on same resource, unreachable steps, and potential trigger-action feedback loops.
 
 ## Scenario authoring audit
 
-Canonical Scenario AST, Capability Registry and the typed/temporal semantic layer are now present as the headless product foundation. Runtime classification/compiler, Safety Compiler, immutable catalog, simulator and UI remain open.
+Canonical Scenario AST, Capability Registry, typed/temporal semantics, Scenario Compiler, and Safety Compiler are now present as the headless product foundation. Immutable catalog, simulator, API, and UI remain open.
 
 Official product track: [`SCENARIO_SYSTEM_PLAN.md`](SCENARIO_SYSTEM_PLAN.md).
 
@@ -33,9 +38,9 @@ Stages 28-42:
 
 - 28 — Canonical Scenario Model — **implemented baseline**;
 - 29 — Capability Registry — **implemented baseline**;
-- 30 — typed expressions + temporal semantics + argument bindings — **implemented baseline; execution lowering pending Stage 31/34**;
-- 31 — automatic Scenario -> Axiom/ADGO compiler;
-- 32 — mandatory Safety Compiler;
+- 30 — typed expressions + temporal semantics + argument bindings — **implemented baseline**;
+- 31 — automatic Scenario -> Axiom/ADGO compiler — **implemented baseline**;
+- 32 — mandatory Safety Compiler + static conflict analysis — **implemented baseline**;
 - 33 — immutable Draft/Validate/Simulate/Publish catalog;
 - 34 — headless simulation/replay;
 - 35 — authenticated Scenario API;
