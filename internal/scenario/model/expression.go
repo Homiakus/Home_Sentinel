@@ -15,6 +15,8 @@ type Expr struct {
 	Args  []Expr `json:"args,omitempty"`
 }
 
+type TypeEnv map[string]TypeRef
+
 func (e Expr) IsZero() bool {
 	return e.Op == "" && e.Ref == "" && e.Value == nil && len(e.Args) == 0
 }
@@ -36,7 +38,7 @@ func (e Expr) Validate() error {
 			return fmt.Errorf("scenario: ref expression requires only ref")
 		}
 		return validateReference(e.Ref)
-	case "not", "exists":
+	case "not", "exists", "missing", "changed":
 		if len(e.Args) != 1 || e.Ref != "" || e.Value != nil {
 			return fmt.Errorf("scenario: %s expression requires one argument", op)
 		}
@@ -44,9 +46,13 @@ func (e Expr) Validate() error {
 		if len(e.Args) < 2 || e.Ref != "" || e.Value != nil {
 			return fmt.Errorf("scenario: %s expression requires at least two arguments", op)
 		}
-	case "eq", "ne", "gt", "gte", "lt", "lte", "in":
+	case "eq", "ne", "gt", "gte", "lt", "lte", "in", "add", "sub", "mul", "div":
 		if len(e.Args) != 2 || e.Ref != "" || e.Value != nil {
 			return fmt.Errorf("scenario: %s expression requires two arguments", op)
+		}
+	case "between":
+		if len(e.Args) != 3 || e.Ref != "" || e.Value != nil {
+			return fmt.Errorf("scenario: between expression requires value, lower and upper arguments")
 		}
 	default:
 		return fmt.Errorf("scenario: unknown expression operator %q", e.Op)
@@ -60,6 +66,147 @@ func (e Expr) Validate() error {
 		}
 	}
 	return nil
+}
+
+func CheckExpr(e Expr, env TypeEnv) (TypeRef, error) {
+	if err := e.Validate(); err != nil {
+		return TypeRef{}, err
+	}
+	op := strings.ToLower(strings.TrimSpace(e.Op))
+	switch op {
+	case "literal":
+		value, err := e.Value.canonical()
+		if err != nil {
+			return TypeRef{}, err
+		}
+		return value.Type, nil
+	case "ref":
+		typ, ok := env[strings.TrimSpace(e.Ref)]
+		if !ok {
+			return TypeRef{}, fmt.Errorf("scenario: unknown expression reference %q", e.Ref)
+		}
+		typ, err := typ.Normalize()
+		if err != nil {
+			return TypeRef{}, fmt.Errorf("scenario: reference %q: %w", e.Ref, err)
+		}
+		return typ, nil
+	case "exists", "missing":
+		if _, err := CheckExpr(e.Args[0], env); err != nil {
+			return TypeRef{}, err
+		}
+		return TypeRef{Kind: TypeBool}, nil
+	case "changed":
+		if strings.ToLower(strings.TrimSpace(e.Args[0].Op)) != "ref" {
+			return TypeRef{}, fmt.Errorf("scenario: changed requires a reference")
+		}
+		if _, err := CheckExpr(e.Args[0], env); err != nil {
+			return TypeRef{}, err
+		}
+		return TypeRef{Kind: TypeBool}, nil
+	case "not":
+		typ, err := CheckExpr(e.Args[0], env)
+		if err != nil {
+			return TypeRef{}, err
+		}
+		if typ.Kind != TypeBool {
+			return TypeRef{}, fmt.Errorf("scenario: not requires bool, got %q", typ.Kind)
+		}
+		return TypeRef{Kind: TypeBool}, nil
+	case "and", "or":
+		for i := range e.Args {
+			typ, err := CheckExpr(e.Args[i], env)
+			if err != nil {
+				return TypeRef{}, err
+			}
+			if typ.Kind != TypeBool {
+				return TypeRef{}, fmt.Errorf("scenario: %s argument %d requires bool, got %q", op, i, typ.Kind)
+			}
+		}
+		return TypeRef{Kind: TypeBool}, nil
+	case "eq", "ne", "gt", "gte", "lt", "lte":
+		left, right, err := checkBinaryTypes(e, env)
+		if err != nil {
+			return TypeRef{}, err
+		}
+		if !left.Compatible(right) {
+			return TypeRef{}, fmt.Errorf("scenario: %s cannot compare %q with %q", op, left.Kind, right.Kind)
+		}
+		if op != "eq" && op != "ne" && !left.Ordered() {
+			return TypeRef{}, fmt.Errorf("scenario: %s does not support ordering for %q", op, left.Kind)
+		}
+		return TypeRef{Kind: TypeBool}, nil
+	case "in":
+		item, list, err := checkBinaryTypes(e, env)
+		if err != nil {
+			return TypeRef{}, err
+		}
+		if list.Kind != TypeList || list.Element == nil || !item.Compatible(*list.Element) {
+			return TypeRef{}, fmt.Errorf("scenario: in requires list of %q", item.Kind)
+		}
+		return TypeRef{Kind: TypeBool}, nil
+	case "between":
+		valueType, err := CheckExpr(e.Args[0], env)
+		if err != nil {
+			return TypeRef{}, err
+		}
+		lower, err := CheckExpr(e.Args[1], env)
+		if err != nil {
+			return TypeRef{}, err
+		}
+		upper, err := CheckExpr(e.Args[2], env)
+		if err != nil {
+			return TypeRef{}, err
+		}
+		if !valueType.Ordered() || !valueType.Compatible(lower) || !valueType.Compatible(upper) {
+			return TypeRef{}, fmt.Errorf("scenario: between requires three compatible ordered values")
+		}
+		return TypeRef{Kind: TypeBool}, nil
+	case "add", "sub", "mul", "div":
+		left, right, err := checkBinaryTypes(e, env)
+		if err != nil {
+			return TypeRef{}, err
+		}
+		return arithmeticResult(op, left, right)
+	default:
+		return TypeRef{}, fmt.Errorf("scenario: unsupported expression operator %q", op)
+	}
+}
+
+func checkBinaryTypes(e Expr, env TypeEnv) (TypeRef, TypeRef, error) {
+	left, err := CheckExpr(e.Args[0], env)
+	if err != nil {
+		return TypeRef{}, TypeRef{}, err
+	}
+	right, err := CheckExpr(e.Args[1], env)
+	if err != nil {
+		return TypeRef{}, TypeRef{}, err
+	}
+	return left, right, nil
+}
+
+func arithmeticResult(op string, left, right TypeRef) (TypeRef, error) {
+	if op == "add" && left.Kind == TypeString && right.Kind == TypeString {
+		return TypeRef{Kind: TypeString}, nil
+	}
+	if !left.Numeric() || !right.Numeric() {
+		return TypeRef{}, fmt.Errorf("scenario: %s requires numeric operands", op)
+	}
+	if left.Kind == TypeInt && right.Kind == TypeInt {
+		if op == "div" {
+			return TypeRef{Kind: TypeFloat}, nil
+		}
+		return TypeRef{Kind: TypeInt}, nil
+	}
+	if (left.Kind == TypeInt || left.Kind == TypeFloat) && (right.Kind == TypeInt || right.Kind == TypeFloat) {
+		return TypeRef{Kind: TypeFloat}, nil
+	}
+	if !left.Compatible(right) {
+		return TypeRef{}, fmt.Errorf("scenario: %s requires compatible quantity dimensions, got %q and %q", op, left.Kind, right.Kind)
+	}
+	if op == "mul" || op == "div" {
+		return TypeRef{}, fmt.Errorf("scenario: %s on unit-aware quantities is not allowed without an explicit dimensional rule", op)
+	}
+	return left, nil
 }
 
 func validateReference(ref string) error {

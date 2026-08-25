@@ -34,6 +34,7 @@ type Trigger struct {
 	Capability CapabilityRef    `json:"capability"`
 	Parameters map[string]Value `json:"parameters,omitempty"`
 	Filter     Expr             `json:"filter,omitempty"`
+	Temporal   []TemporalSpec   `json:"temporal,omitempty"`
 }
 
 func (t Trigger) Validate() error {
@@ -54,6 +55,11 @@ func (t Trigger) Validate() error {
 			return fmt.Errorf("scenario: trigger %q filter: %w", t.ID, err)
 		}
 	}
+	for i := range t.Temporal {
+		if err := t.Temporal[i].Validate(); err != nil {
+			return fmt.Errorf("scenario: trigger %q temporal[%d]: %w", t.ID, i, err)
+		}
+	}
 	return nil
 }
 
@@ -68,6 +74,13 @@ func normalizeTrigger(t Trigger) (Trigger, error) {
 		return Trigger{}, err
 	}
 	t.Filter = filter
+	for i := range t.Temporal {
+		normalized, err := NormalizeTemporal(t.Temporal[i])
+		if err != nil {
+			return Trigger{}, err
+		}
+		t.Temporal[i] = normalized
+	}
 	if err := t.Validate(); err != nil {
 		return Trigger{}, err
 	}

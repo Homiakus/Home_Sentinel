@@ -39,7 +39,11 @@ func Normalize(source Scenario) (Scenario, error) {
 	scenario.Flow = flow
 	for i := range scenario.Parameters {
 		scenario.Parameters[i].ID = strings.TrimSpace(scenario.Parameters[i].ID)
-		scenario.Parameters[i].Type = strings.TrimSpace(scenario.Parameters[i].Type)
+		typ, err := scenario.Parameters[i].Type.Normalize()
+		if err != nil {
+			return Scenario{}, fmt.Errorf("scenario: normalize parameter %q type: %w", scenario.Parameters[i].ID, err)
+		}
+		scenario.Parameters[i].Type = typ
 		if scenario.Parameters[i].Default != nil {
 			canonical, err := scenario.Parameters[i].Default.canonical()
 			if err != nil {

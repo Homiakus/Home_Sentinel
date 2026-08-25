@@ -35,6 +35,20 @@ func (s Scenario) Validate() error {
 		}
 		triggerIDs[s.Triggers[i].ID] = struct{}{}
 	}
+	for i := range s.Triggers {
+		for j := range s.Triggers[i].Temporal {
+			spec := s.Triggers[i].Temporal[j]
+			if spec.Kind != TemporalAfter && spec.Kind != TemporalBefore {
+				continue
+			}
+			if spec.RelatedTriggerID == s.Triggers[i].ID {
+				return fmt.Errorf("scenario: trigger %q temporal[%d] cannot reference itself", s.Triggers[i].ID, j)
+			}
+			if _, exists := triggerIDs[spec.RelatedTriggerID]; !exists {
+				return fmt.Errorf("scenario: trigger %q temporal[%d] references unknown trigger %q", s.Triggers[i].ID, j, spec.RelatedTriggerID)
+			}
+		}
+	}
 	if !s.Condition.IsZero() {
 		if err := s.Condition.Validate(); err != nil {
 			return fmt.Errorf("scenario: condition: %w", err)
