@@ -27,10 +27,13 @@
 - Stage 31b — ADGO Lowering: durable multi-step workflow generation (Activity, Wait, HumanApproval, Fork, Join, Subflow, Gate/Decision, Compensation, ResourceLock).
 - Stage 32 — Safety Compiler: mandatory security boundary generating human approval gates, single-writer resource locks, read-before-write, verify-after-write, maximum duration clamps, and ensure-disabled compensation; separate User Intent Graph and System Graph representations.
 - Stage 32b — Static Conflict Analysis: pre-publish detection of self-recursion, mutual recursion, conflicting desired states on same resource, unreachable steps, and potential trigger-action feedback loops.
+- Stage 33 — Scenario Catalog: immutable draft/validate/simulate/publish lifecycle, optimistic concurrency ETag control, rollback without history mutation, audit logs, active execution version pinning.
+- Stage 33b — Dependency Index: bidirectional dependency graph (scenario <-> capabilities, entities, subflows, templates), fail-closed protection against active dependency removal.
+- Stage 34 — Headless Simulator: pure simulation, replay and what-if analysis with virtual clock manipulation, hypothetical WOULD_EXECUTE side effects with zero real gateway calls, safety node trace projections.
 
 ## Scenario authoring audit
 
-Canonical Scenario AST, Capability Registry, typed/temporal semantics, Scenario Compiler, and Safety Compiler are now present as the headless product foundation. Immutable catalog, simulator, API, and UI remain open.
+Canonical Scenario AST, Capability Registry, typed/temporal semantics, Scenario Compiler, Safety Compiler, Scenario Catalog, and Headless Simulator are now present as the headless product foundation. Scenario API and UI layer remain open.
 
 Official product track: [`SCENARIO_SYSTEM_PLAN.md`](SCENARIO_SYSTEM_PLAN.md).
 
@@ -41,8 +44,8 @@ Stages 28-42:
 - 30 — typed expressions + temporal semantics + argument bindings — **implemented baseline**;
 - 31 — automatic Scenario -> Axiom/ADGO compiler — **implemented baseline**;
 - 32 — mandatory Safety Compiler + static conflict analysis — **implemented baseline**;
-- 33 — immutable Draft/Validate/Simulate/Publish catalog;
-- 34 — headless simulation/replay;
+- 33 — immutable Draft/Validate/Simulate/Publish catalog + dependency index — **implemented baseline**;
+- 34 — headless simulation/replay — **implemented baseline**;
 - 35 — authenticated Scenario API;
 - 36 — Simple Builder;
 - 37 — Advanced Flow Editor;
