@@ -192,7 +192,7 @@ func sampleScenario(t *testing.T) Scenario {
 				Kind: StepAction,
 				Action: &ActionStep{
 					Capability: CapabilityRef{ID: "notification.send", Version: "1.0.0"},
-					Arguments:  map[string]Value{"message": message},
+					Arguments:  map[string]Expr{"message": Literal(message)},
 				},
 			},
 			{ID: "wait", Kind: StepWait, Wait: &WaitStep{Duration: 30 * time.Second}},

@@ -144,6 +144,7 @@ func (t TypeRef) Compatible(other TypeRef) bool {
 			if left.Enum[i] != right.Enum[i] {
 				return false
 			}
+		}
 	case TypeEntityRef:
 		return left.EntityKind == right.EntityKind
 	case TypeList:

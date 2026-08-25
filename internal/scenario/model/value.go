@@ -100,6 +100,10 @@ func NewArtifactRefValue(value ArtifactValue) (Value, error) {
 	return NewTypedValue(TypeRef{Kind: TypeArtifactRef}, value)
 }
 
+func (v Value) Unmarshal(target any) error {
+	return json.Unmarshal(v.Data, target)
+}
+
 func (v Value) MarshalJSON() ([]byte, error) {
 	canonical, err := v.canonical()
 	if err != nil {

@@ -36,6 +36,22 @@ func validateFlowTypes(path string, flow Flow, env TypeEnv) error {
 	for i := range flow.Steps {
 		step := flow.Steps[i]
 		stepPath := fmt.Sprintf("%s.steps[%d]", path, i)
+		if step.Action != nil {
+			for argName, argExpr := range step.Action.Arguments {
+				argPath := fmt.Sprintf("%s.action.arguments[%s]", stepPath, argName)
+				if _, err := CheckExpr(argExpr, env); err != nil {
+					return fmt.Errorf("scenario: %s: %w", argPath, err)
+				}
+			}
+		}
+		if step.Subflow != nil {
+			for argName, argExpr := range step.Subflow.Arguments {
+				argPath := fmt.Sprintf("%s.subflow.arguments[%s]", stepPath, argName)
+				if _, err := CheckExpr(argExpr, env); err != nil {
+					return fmt.Errorf("scenario: %s: %w", argPath, err)
+				}
+			}
+		}
 		if step.If != nil {
 			if err := requireBool(stepPath+".if.condition", step.If.Condition, env); err != nil {
 				return err

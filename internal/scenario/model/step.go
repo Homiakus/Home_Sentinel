@@ -40,9 +40,9 @@ func (r RetryHint) Validate() error {
 }
 
 type ActionStep struct {
-	Capability CapabilityRef    `json:"capability"`
-	Arguments  map[string]Value `json:"arguments,omitempty"`
-	Retry      *RetryHint       `json:"retry,omitempty"`
+	Capability CapabilityRef   `json:"capability"`
+	Arguments  map[string]Expr `json:"arguments,omitempty"`
+	Retry      *RetryHint      `json:"retry,omitempty"`
 }
 
 type WaitStep struct {
@@ -90,9 +90,9 @@ type HumanApprovalStep struct {
 }
 
 type SubflowStep struct {
-	ScenarioID ID               `json:"scenarioId"`
-	Version    Version          `json:"version"`
-	Arguments  map[string]Value `json:"arguments,omitempty"`
+	ScenarioID ID              `json:"scenarioId"`
+	Version    Version         `json:"version"`
+	Arguments  map[string]Expr `json:"arguments,omitempty"`
 }
 
 type StopOutcome string
@@ -215,7 +215,7 @@ func (s Step) Validate() error {
 		if s.Subflow.Version == 0 {
 			return fmt.Errorf("scenario: subflow step %q must reference a published version", s.ID)
 		}
-		if err := validateValues("subflow argument", s.Subflow.Arguments); err != nil {
+		if err := validateExprMap("subflow argument", s.Subflow.Arguments); err != nil {
 			return err
 		}
 	case StepStop:
@@ -237,11 +237,26 @@ func validateAction(action ActionStep) error {
 	if err := action.Capability.Validate(); err != nil {
 		return err
 	}
-	if err := validateValues("action argument", action.Arguments); err != nil {
+	if err := validateExprMap("action argument", action.Arguments); err != nil {
 		return err
 	}
 	if action.Retry != nil {
 		return action.Retry.Validate()
+	}
+	return nil
+}
+
+func validateExprMap(label string, exprs map[string]Expr) error {
+	for key, expr := range exprs {
+		if err := validateToken(label, key); err != nil {
+			return err
+		}
+		if expr.IsZero() {
+			return fmt.Errorf("scenario: %s %q cannot be empty", label, key)
+		}
+		if err := expr.Validate(); err != nil {
+			return fmt.Errorf("scenario: %s %q: %w", label, key, err)
+		}
 	}
 	return nil
 }
@@ -292,7 +307,7 @@ func normalizeStep(s Step) (Step, error) {
 	s.ID = StepID(strings.TrimSpace(string(s.ID)))
 	if s.Action != nil {
 		normalizeCapability(&s.Action.Capability)
-		if err := normalizeValues(s.Action.Arguments); err != nil {
+		if err := normalizeExprMap(s.Action.Arguments); err != nil {
 			return Step{}, err
 		}
 	}
@@ -350,7 +365,7 @@ func normalizeStep(s Step) (Step, error) {
 	}
 	if s.Subflow != nil {
 		s.Subflow.ScenarioID = ID(strings.TrimSpace(string(s.Subflow.ScenarioID)))
-		if err := normalizeValues(s.Subflow.Arguments); err != nil {
+		if err := normalizeExprMap(s.Subflow.Arguments); err != nil {
 			return Step{}, err
 		}
 	}
@@ -367,6 +382,34 @@ func normalizeCapability(ref *CapabilityRef) {
 		ref.Entity.ID = strings.TrimSpace(ref.Entity.ID)
 		ref.Entity.Kind = strings.TrimSpace(ref.Entity.Kind)
 	}
+}
+
+func normalizeExprMap(exprs map[string]Expr) error {
+	if len(exprs) == 0 {
+		return nil
+	}
+	normalized := make(map[string]Expr, len(exprs))
+	for key, expr := range exprs {
+		key = strings.TrimSpace(key)
+		if err := validateToken("argument key", key); err != nil {
+			return err
+		}
+		if _, exists := normalized[key]; exists {
+			return fmt.Errorf("scenario: duplicate normalized argument key %q", key)
+		}
+		canonical, err := normalizeExpr(expr)
+		if err != nil {
+			return err
+		}
+		normalized[key] = canonical
+	}
+	for key := range exprs {
+		delete(exprs, key)
+	}
+	for key, expr := range normalized {
+		exprs[key] = expr
+	}
+	return nil
 }
 
 func normalizeValues(values map[string]Value) error {

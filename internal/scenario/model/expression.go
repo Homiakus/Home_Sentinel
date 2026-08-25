@@ -17,6 +17,14 @@ type Expr struct {
 
 type TypeEnv map[string]TypeRef
 
+func Literal(v Value) Expr {
+	return Expr{Op: "literal", Value: &v}
+}
+
+func Ref(r string) Expr {
+	return Expr{Op: "ref", Ref: r}
+}
+
 func (e Expr) IsZero() bool {
 	return e.Op == "" && e.Ref == "" && e.Value == nil && len(e.Args) == 0
 }

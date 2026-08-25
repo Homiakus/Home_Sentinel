@@ -21,6 +21,7 @@
 - Stage 28 — Canonical Scenario Model: strict headless AST, stable scenario/revision/step identity, typed capability references, semantic flow nodes, strict decode, deterministic normalization and semantic digest, clone-to-draft, nested duplicate detection and fuzz baseline.
 - Stage 29 — Capability Registry: versioned capability descriptors, entity/device binding, risk/permission/visibility metadata, typed schemas/UI hints, health without deletion, compatible resolution, dependency-protected removal, deterministic snapshot/digest and discovery filters.
 - Stage 30a — Typed/temporal semantic baseline: canonical typed values and units, TypeRef capability schemas, static expression checking, first-class temporal AST, explicit timezone/DST/catch-up policy and deterministic wall-clock resolution.
+- Stage 30b — Typed expression bindings: ActionStep and SubflowStep arguments upgraded from raw map[string]Value to map[string]Expr with normalization, reference validation, type inference, capability schema compatibility validation, default handling and unknown argument rejection.
 
 ## Scenario authoring audit
 
@@ -32,7 +33,7 @@ Stages 28-42:
 
 - 28 — Canonical Scenario Model — **implemented baseline**;
 - 29 — Capability Registry — **implemented baseline**;
-- 30 — typed expressions + temporal semantics — **model/type-check baseline implemented; execution lowering pending Stage 31/34**;
+- 30 — typed expressions + temporal semantics + argument bindings — **implemented baseline; execution lowering pending Stage 31/34**;
 - 31 — automatic Scenario -> Axiom/ADGO compiler;
 - 32 — mandatory Safety Compiler;
 - 33 — immutable Draft/Validate/Simulate/Publish catalog;
