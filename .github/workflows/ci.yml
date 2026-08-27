@@ -15,23 +15,26 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          go-version: '1.26.x'
-          # go.sum is not committed yet; enabling setup-go cache before the
-          # module lock exists can fail before `go mod download` gets a chance
-          # to materialize it. Stage 14 turns caching back on with go.sum.
-          cache: false
+          fetch-depth: 0
 
-      - name: Download and verify modules
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: .go-version
+          cache: true
+
+      - name: Module hygiene
         run: |
           go mod download
           go mod verify
           go list ./... >/dev/null
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
 
       - name: Format check
         run: |
@@ -46,6 +49,9 @@ jobs:
 
       - name: Race tests
         run: go test -race ./... -count=1
+
+      - name: Engineering-loop reconciliation
+        run: go run ./cmd/sentinel-engloop reconcile --root . --strict
 
       - name: Benchmark smoke
         run: |
