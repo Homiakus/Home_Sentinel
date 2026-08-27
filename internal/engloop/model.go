@@ -141,13 +141,9 @@ func ClassifyPaths(paths []string) RiskClass {
 			"deploy/",
 			".github/workflows/",
 		):
-			if risk < RiskHigh {
-				risk = RiskHigh
-			}
+			risk = maxRisk(risk, RiskHigh)
 		case strings.HasPrefix(p, "internal/") || strings.HasPrefix(p, "cmd/"):
-			if risk < RiskMedium {
-				risk = RiskMedium
-			}
+			risk = maxRisk(risk, RiskMedium)
 		}
 	}
 	return risk
@@ -162,11 +158,11 @@ func GatePlan(paths []string, requested RiskClass) []Gate {
 		GateStatic: {},
 		GateUnit:   {},
 	}
-	if risk == RiskMedium || risk == RiskHigh || risk == RiskCritical {
+	if riskRank(risk) >= riskRank(RiskMedium) {
 		set[GateProperty] = struct{}{}
 		set[GateRace] = struct{}{}
 	}
-	if risk == RiskHigh || risk == RiskCritical {
+	if riskRank(risk) >= riskRank(RiskHigh) {
 		set[GateFuzz] = struct{}{}
 		set[GateContract] = struct{}{}
 	}
@@ -229,12 +225,29 @@ func validPlanState(v PlanState) bool {
 }
 
 func validRisk(v RiskClass) bool {
+	return riskRank(v) >= 0
+}
+
+func riskRank(v RiskClass) int {
 	switch v {
-	case RiskLow, RiskMedium, RiskHigh, RiskCritical:
-		return true
+	case RiskLow:
+		return 0
+	case RiskMedium:
+		return 1
+	case RiskHigh:
+		return 2
+	case RiskCritical:
+		return 3
 	default:
-		return false
+		return -1
 	}
+}
+
+func maxRisk(a, b RiskClass) RiskClass {
+	if riskRank(b) > riskRank(a) {
+		return b
+	}
+	return a
 }
 
 func validGate(v Gate) bool {
@@ -265,6 +278,7 @@ func isCriticalSurface(p string) bool {
 	return hasAnyPrefix(p,
 		"internal/security/",
 		"internal/auth/",
+		"internal/authz/",
 		"internal/authorization/",
 		"internal/gateway/",
 		"internal/gateways/",
