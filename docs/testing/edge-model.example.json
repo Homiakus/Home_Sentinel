@@ -1,0 +1,39 @@
+{
+  "name": "door-unlock-critical-projection",
+  "strength": 3,
+  "max_candidates": 50000,
+  "factors": [
+    {"name": "authorization", "values": ["viewer", "operator", "security-admin"]},
+    {"name": "human_approval", "values": ["missing", "approved", "rejected"]},
+    {"name": "ownership", "values": ["free", "held-by-self", "held-by-other"]},
+    {"name": "provider_outcome", "values": ["applied", "timeout", "response-lost"]},
+    {"name": "crash_point", "values": ["none", "before-call", "after-provider"]},
+    {"name": "verification", "values": ["locked", "unlocked", "unknown"]},
+    {"name": "replay", "values": ["fresh", "duplicate", "stale"]}
+  ],
+  "forbidden": [
+    {"authorization": "viewer", "human_approval": "approved"},
+    {"human_approval": "rejected", "provider_outcome": "applied"},
+    {"crash_point": "before-call", "provider_outcome": "applied"}
+  ],
+  "required": [
+    {
+      "authorization": "security-admin",
+      "human_approval": "approved",
+      "ownership": "held-by-self",
+      "provider_outcome": "response-lost",
+      "crash_point": "after-provider",
+      "verification": "unknown",
+      "replay": "fresh"
+    },
+    {
+      "authorization": "operator",
+      "human_approval": "missing",
+      "ownership": "held-by-other",
+      "provider_outcome": "timeout",
+      "crash_point": "before-call",
+      "verification": "locked",
+      "replay": "stale"
+    }
+  ]
+}
