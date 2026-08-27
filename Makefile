@@ -1,11 +1,12 @@
 GREMLINS_VERSION := v0.6.0
 GOVULNCHECK_VERSION := v1.7.0
+CYCLONEDX_GOMOD_VERSION := v1.10.0
 TOOLS_DIR ?= .tools
 ARTIFACTS_DIR ?= .artifacts
 ENGLOOP := go run ./cmd/sentinel-engloop
 SUPPLYCHAIN := go run ./cmd/sentinel-supplychain
 
-.PHONY: fmt vet test test-race check engloop-reconcile engloop-strict engloop-gates edge-suite supply-chain govulncheck-install govulncheck gremlins-install mutation-diff
+.PHONY: fmt vet test test-race check engloop-reconcile engloop-strict engloop-gates edge-suite supply-chain govulncheck-install govulncheck sbom-install sbom gremlins-install mutation-diff
 
 fmt:
 	gofmt -w $$(find . -name '*.go' -not -path './vendor/*')
@@ -42,6 +43,14 @@ govulncheck-install:
 
 govulncheck: govulncheck-install
 	"$(TOOLS_DIR)/govulncheck" ./...
+
+sbom-install:
+	mkdir -p "$(TOOLS_DIR)"
+	GOBIN="$(CURDIR)/$(TOOLS_DIR)" go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@$(CYCLONEDX_GOMOD_VERSION)
+
+sbom: sbom-install
+	mkdir -p "$(ARTIFACTS_DIR)"
+	"$(TOOLS_DIR)/cyclonedx-gomod" mod -json -output "$(ARTIFACTS_DIR)/go-mod.bom.json" .
 
 gremlins-install:
 	mkdir -p "$(TOOLS_DIR)"
