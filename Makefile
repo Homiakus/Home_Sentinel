@@ -3,7 +3,7 @@ TOOLS_DIR ?= .tools
 ARTIFACTS_DIR ?= .artifacts
 ENGLOOP := go run ./cmd/sentinel-engloop
 
-.PHONY: fmt vet test test-race check engloop-reconcile engloop-strict engloop-gates gremlins-install mutation-diff
+.PHONY: fmt vet test test-race check engloop-reconcile engloop-strict engloop-gates edge-suite gremlins-install mutation-diff
 
 fmt:
 	gofmt -w $$(find . -name '*.go' -not -path './vendor/*')
@@ -26,6 +26,10 @@ engloop-strict:
 engloop-gates:
 	@test -n "$(CHANGED_FILE)" || (echo 'CHANGED_FILE is required' && exit 2)
 	$(ENGLOOP) gates --changed-file "$(CHANGED_FILE)"
+
+edge-suite:
+	@test -n "$(MODEL)" || (echo 'MODEL is required, e.g. docs/testing/edge-model.example.json' && exit 2)
+	$(ENGLOOP) edge --file "$(MODEL)"
 
 gremlins-install:
 	mkdir -p "$(TOOLS_DIR)"
