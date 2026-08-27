@@ -44,6 +44,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runPacket(args[1:], stdout, stderr)
 	case "gates":
 		return runGates(args[1:], stdout, stderr)
+	case "edge":
+		return runEdge(args[1:], stdout, stderr)
 	case "mutation":
 		return runMutation(args[1:], stdout, stderr)
 	case "help", "-h", "--help":
@@ -69,9 +71,7 @@ func runReconcile(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	if *jsonOut {
-		enc := json.NewEncoder(stdout)
-		enc.SetIndent("", "  ")
-		if err := enc.Encode(report); err != nil {
+		if err := writeJSON(stdout, report); err != nil {
 			return fmt.Errorf("write report: %w", err)
 		}
 	} else {
@@ -103,15 +103,11 @@ func runPacket(args []string, stdout, stderr io.Writer) error {
 	if err := fs.Parse(args); err != nil {
 		return exitError{code: 2, msg: err.Error()}
 	}
-	var r io.Reader = os.Stdin
-	if *file != "" {
-		f, err := os.Open(*file)
-		if err != nil {
-			return fmt.Errorf("open work packet: %w", err)
-		}
-		defer f.Close()
-		r = f
+	r, closeFn, err := openInput(*file)
+	if err != nil {
+		return fmt.Errorf("open work packet: %w", err)
 	}
+	defer closeFn()
 	packet, err := engloop.DecodeWorkPacket(r)
 	if err != nil {
 		return exitError{code: 3, msg: err.Error()}
@@ -129,15 +125,11 @@ func runGates(args []string, stdout, stderr io.Writer) error {
 		return exitError{code: 2, msg: err.Error()}
 	}
 
-	var r io.Reader = os.Stdin
-	if *changedFile != "" {
-		f, err := os.Open(*changedFile)
-		if err != nil {
-			return fmt.Errorf("open changed-file: %w", err)
-		}
-		defer f.Close()
-		r = f
+	r, closeFn, err := openInput(*changedFile)
+	if err != nil {
+		return fmt.Errorf("open changed-file: %w", err)
 	}
+	defer closeFn()
 	paths, err := readLines(r)
 	if err != nil {
 		return fmt.Errorf("read changed paths: %w", err)
@@ -163,10 +155,44 @@ func runGates(args []string, stdout, stderr io.Writer) error {
 		Gates:           engloop.GatePlan(paths, risk),
 		MutationTargets: engloop.MutationTargets(paths),
 	}
-	enc := json.NewEncoder(stdout)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(result); err != nil {
+	if err := writeJSON(stdout, result); err != nil {
 		return fmt.Errorf("write gate plan: %w", err)
+	}
+	return nil
+}
+
+func runEdge(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("edge", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	file := fs.String("file", "", "edge model JSON; stdin when empty")
+	if err := fs.Parse(args); err != nil {
+		return exitError{code: 2, msg: err.Error()}
+	}
+	r, closeFn, err := openInput(*file)
+	if err != nil {
+		return fmt.Errorf("open edge model: %w", err)
+	}
+	defer closeFn()
+
+	dec := json.NewDecoder(r)
+	dec.DisallowUnknownFields()
+	var model engloop.EdgeModel
+	if err := dec.Decode(&model); err != nil {
+		return exitError{code: 3, msg: fmt.Sprintf("decode edge model: %v", err)}
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return exitError{code: 3, msg: "decode edge model: multiple JSON values"}
+		}
+		return exitError{code: 3, msg: fmt.Sprintf("decode edge model trailing data: %v", err)}
+	}
+	suite, err := engloop.GenerateEdgeSuite(model)
+	if err != nil {
+		return exitError{code: 3, msg: err.Error()}
+	}
+	if err := writeJSON(stdout, suite); err != nil {
+		return fmt.Errorf("write edge suite: %w", err)
 	}
 	return nil
 }
@@ -179,23 +205,17 @@ func runMutation(args []string, stdout, stderr io.Writer) error {
 	if err := fs.Parse(args); err != nil {
 		return exitError{code: 2, msg: err.Error()}
 	}
-	var r io.Reader = os.Stdin
-	if *file != "" {
-		f, err := os.Open(*file)
-		if err != nil {
-			return fmt.Errorf("open mutation report: %w", err)
-		}
-		defer f.Close()
-		r = f
+	r, closeFn, err := openInput(*file)
+	if err != nil {
+		return fmt.Errorf("open mutation report: %w", err)
 	}
+	defer closeFn()
 	report, err := engloop.EvaluateGremlins(r)
 	if err != nil {
 		return exitError{code: 3, msg: err.Error()}
 	}
 	if *jsonOut {
-		enc := json.NewEncoder(stdout)
-		enc.SetIndent("", "  ")
-		if err := enc.Encode(report); err != nil {
+		if err := writeJSON(stdout, report); err != nil {
 			return fmt.Errorf("write mutation report: %w", err)
 		}
 	} else {
@@ -208,6 +228,23 @@ func runMutation(args []string, stdout, stderr io.Writer) error {
 		return exitError{code: 10, msg: "critical mutation evidence is not clean"}
 	}
 	return nil
+}
+
+func openInput(path string) (io.Reader, func(), error) {
+	if strings.TrimSpace(path) == "" {
+		return os.Stdin, func() {}, nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, func() {}, err
+	}
+	return f, func() { _ = f.Close() }, nil
+}
+
+func writeJSON(w io.Writer, v any) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(v)
 }
 
 func readLines(r io.Reader) ([]string, error) {
@@ -241,9 +278,10 @@ func parseRisk(s string) (engloop.RiskClass, bool) {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprintln(w, "usage: sentinel-engloop <reconcile|packet|gates|mutation> [flags]")
+	fmt.Fprintln(w, "usage: sentinel-engloop <reconcile|packet|gates|edge|mutation> [flags]")
 	fmt.Fprintln(w, "  reconcile  compare recorded roadmap status with observed checkout")
 	fmt.Fprintln(w, "  packet     validate a machine-readable Work Packet")
 	fmt.Fprintln(w, "  gates      derive risk, gates and mutation targets from changed paths")
+	fmt.Fprintln(w, "  edge       generate a constrained t-way multidimensional edge suite")
 	fmt.Fprintln(w, "  mutation   turn Gremlins JSON into a critical semantic gate")
 }
