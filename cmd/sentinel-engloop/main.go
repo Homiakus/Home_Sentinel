@@ -44,6 +44,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runPacket(args[1:], stdout, stderr)
 	case "gates":
 		return runGates(args[1:], stdout, stderr)
+	case "mutation":
+		return runMutation(args[1:], stdout, stderr)
 	case "help", "-h", "--help":
 		usage(stdout)
 		return nil
@@ -169,6 +171,45 @@ func runGates(args []string, stdout, stderr io.Writer) error {
 	return nil
 }
 
+func runMutation(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("mutation", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	file := fs.String("file", "", "Gremlins JSON report; stdin when empty")
+	jsonOut := fs.Bool("json", false, "write normalized JSON report")
+	if err := fs.Parse(args); err != nil {
+		return exitError{code: 2, msg: err.Error()}
+	}
+	var r io.Reader = os.Stdin
+	if *file != "" {
+		f, err := os.Open(*file)
+		if err != nil {
+			return fmt.Errorf("open mutation report: %w", err)
+		}
+		defer f.Close()
+		r = f
+	}
+	report, err := engloop.EvaluateGremlins(r)
+	if err != nil {
+		return exitError{code: 3, msg: err.Error()}
+	}
+	if *jsonOut {
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(report); err != nil {
+			return fmt.Errorf("write mutation report: %w", err)
+		}
+	} else {
+		fmt.Fprintf(stdout, "mutation efficacy=%.2f total=%d critical_blockers=%d noncritical_lived=%d\n", report.ToolEfficacy, report.MutantsTotal, len(report.CriticalBlockers), len(report.NonCriticalLived))
+		for _, finding := range report.CriticalBlockers {
+			fmt.Fprintf(stdout, "BLOCKER %s %s:%d:%d %s\n", finding.Status, finding.File, finding.Line, finding.Column, finding.Type)
+		}
+	}
+	if report.HasCriticalBlockers() {
+		return exitError{code: 10, msg: "critical mutation evidence is not clean"}
+	}
+	return nil
+}
+
 func readLines(r io.Reader) ([]string, error) {
 	scanner := bufio.NewScanner(r)
 	paths := make([]string, 0)
@@ -200,8 +241,9 @@ func parseRisk(s string) (engloop.RiskClass, bool) {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprintln(w, "usage: sentinel-engloop <reconcile|packet|gates> [flags]")
+	fmt.Fprintln(w, "usage: sentinel-engloop <reconcile|packet|gates|mutation> [flags]")
 	fmt.Fprintln(w, "  reconcile  compare recorded roadmap status with observed checkout")
 	fmt.Fprintln(w, "  packet     validate a machine-readable Work Packet")
 	fmt.Fprintln(w, "  gates      derive risk, gates and mutation targets from changed paths")
+	fmt.Fprintln(w, "  mutation   turn Gremlins JSON into a critical semantic gate")
 }
