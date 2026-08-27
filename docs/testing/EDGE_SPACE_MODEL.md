@@ -210,3 +210,66 @@ Code coverage не используется как единственный кр
 8. long-tail scheduled fuzz/soak.
 
 Нельзя экономить тестовый бюджет путём удаления crash/replay/authority измерений из physical action path.
+
+## 11. Executable edge-space model
+
+Политика выше имеет машинное представление в `internal/engloop/edgespace.go` и CLI `sentinel-engloop edge`.
+
+Пример модели: [`edge-model.example.json`](edge-model.example.json).
+
+Запуск:
+
+```text
+make edge-suite MODEL=docs/testing/edge-model.example.json
+```
+
+или напрямую:
+
+```text
+go run ./cmd/sentinel-engloop edge --file docs/testing/edge-model.example.json
+```
+
+### 11.1 JSON contract
+
+Модель содержит:
+
+- `name` — стабильное имя test space;
+- `strength` — t-way strength от 1 до количества факторов;
+- `max_candidates` — guard от случайного combinatorial explosion;
+- `factors[]` — имя фактора и конечное множество значений;
+- `forbidden[]` — partial assignments, исключающие invalid-by-construction combinations;
+- `required[]` — обязательные targeted high-order combinations независимо от общего `strength`.
+
+Генератор:
+
+1. валидирует уникальность factors/values и все constraints;
+2. детерминированно строит допустимое candidate space;
+3. вычисляет полный набор достижимых t-way tuple obligations;
+4. сначала включает `required` high-order projections;
+5. затем greedy-set-cover выбирает минимизируемый детерминированный набор vectors, покрывающий оставшиеся tuples;
+6. возвращает фактическое число candidates и covered tuples как evidence.
+
+### 11.2 Safety limits
+
+Генератор намеренно не пытается материализовать бесконечные/огромные пространства. По умолчанию действует hard guard `100000` допустимых Cartesian candidates; Work Packet может задать меньший `max_candidates`.
+
+Если пространство превышает guard, это не повод увеличить число вслепую. Нужно:
+
+- разбить модель на orthogonal/subsystem projections;
+- выделить critical 4/5/6-way subset;
+- оставить широкую 2/3-way regression model;
+- перенести continuous/random domains в property/fuzz layer.
+
+### 11.3 Relationship to real tests
+
+Сгенерированный vector не является тестом сам по себе. Test harness обязан преобразовать vector в реальный fixture и применить executable oracle/invariant.
+
+Обязательная цепочка:
+
+```text
+EdgeModel -> EdgeSuite -> Fixture Adapter -> System Under Test -> Invariant Oracle
+```
+
+Coverage считается доказанным только для vector, который реально исполнился. Сгенерировать JSON и не прогнать его недостаточно.
+
+Для concurrency/crash sequence semantics обычного factor assignment недостаточно: `Sequence space` и `Crash-point matrix` из разделов 6–7 остаются отдельными обязательными слоями test mesh.
