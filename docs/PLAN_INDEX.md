@@ -2,6 +2,20 @@
 
 Все планы являются частями одного roadmap и не должны реализовываться как независимые архитектуры.
 
+## 0. Обязательный execution protocol
+
+[`engineering/ENGINEERING_LOOP.md`](engineering/ENGINEERING_LOOP.md)
+
+Это не отдельный product track, а обязательный способ выполнения всех планов ниже. Перед каждым изменением контур reconciles записанный статус с фактическим `main`, формирует минимальный Work Packet, моделирует многомерное edge-space, пишет executable evidence, выполняет race/property/fuzz/fault/mutation gates и только после этого обновляет `[x]`/status.
+
+Связанные test contracts:
+
+- [`testing/EDGE_SPACE_MODEL.md`](testing/EDGE_SPACE_MODEL.md) — multidimensional boundary/interleaving/crash space;
+- [`testing/MUTATION_TESTING.md`](testing/MUTATION_TESTING.md) — test-of-tests и mutation policy;
+- [`testing/STRATEGY.md`](testing/STRATEGY.md) — общий test mesh.
+
+Запрещено выполнять roadmap по одним Markdown-чекбоксам: recorded status является кэшем и обязан сверяться с кодом, contracts и verification evidence.
+
 ## 1. Production control-plane master plan
 
 [`AXIOM_IMPLEMENTATION_PLAN.md`](AXIOM_IMPLEMENTATION_PLAN.md)
@@ -25,7 +39,8 @@
 ## 4. Engineering gates
 
 - [`PERFORMANCE.md`](PERFORMANCE.md) — performance/allocation baseline policy.
-- [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md) — фактически реализованный baseline и следующий порядок работ.
+- [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md) — записанный baseline; всегда reconciles с фактическим `main` перед выбором следующей работы.
+- [`engineering/ENGINEERING_LOOP.md`](engineering/ENGINEERING_LOOP.md) — evidence-driven cyclic implementation/autofix state machine.
 
 ## Dependency rule
 
@@ -43,3 +58,5 @@ MASTER PRODUCTION FOUNDATION
 ```
 
 Ни один UI/AI scenario path не может обойти master-plan RBAC, gateway, resource ownership, reconciliation или release/migration semantics.
+
+Каждый переход по dependency graph выполняется через `ENGINEERING_LOOP.md`; mutation/edge-space evidence является частью Definition of Done для затронутых critical semantics.
