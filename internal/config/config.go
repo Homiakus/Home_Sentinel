@@ -21,15 +21,21 @@ var (
 	ErrInsecureRemoteBind = errors.New("config: remote bind requires TLS")
 )
 
-type Config struct {
-	Version  int            `json:"version"`
-	Server   ServerConfig   `json:"server"`
-	Storage  StorageConfig  `json:"storage"`
-	Security SecurityConfig `json:"security"`
-	Runtime  RuntimeConfig  `json:"runtime"`
+// HardenedConfig is the versioned, fail-closed configuration document used by
+// the security/bootstrap configuration path. It is intentionally distinct
+// from Config, the runtime application model consumed by app.Open.
+//
+// Keeping the two contracts explicitly named prevents accidental structural
+// aliasing while the runtime configuration migration is completed.
+type HardenedConfig struct {
+	Version  int                    `json:"version"`
+	Server   HardenedServerConfig   `json:"server"`
+	Storage  StorageConfig          `json:"storage"`
+	Security HardenedSecurityConfig `json:"security"`
+	Runtime  RuntimeConfig          `json:"runtime"`
 }
 
-type ServerConfig struct {
+type HardenedServerConfig struct {
 	Listen                   string    `json:"listen"`
 	MaxBodyBytes             int64     `json:"maxBodyBytes"`
 	ReadHeaderTimeoutSeconds int       `json:"readHeaderTimeoutSeconds"`
@@ -55,7 +61,7 @@ type RuntimeConfig struct {
 	ShutdownTimeoutSeconds int `json:"shutdownTimeoutSeconds"`
 }
 
-type SecurityConfig struct {
+type HardenedSecurityConfig struct {
 	Callbacks CallbackConfig `json:"callbacks"`
 }
 
@@ -73,10 +79,10 @@ type SecretRef struct {
 	Env string `json:"env"`
 }
 
-func Default() Config {
-	return Config{
+func DefaultHardened() HardenedConfig {
+	return HardenedConfig{
 		Version: CurrentVersion,
-		Server: ServerConfig{
+		Server: HardenedServerConfig{
 			Listen:                   "127.0.0.1:8080",
 			MaxBodyBytes:             1 << 20,
 			ReadHeaderTimeoutSeconds: 5,
@@ -92,7 +98,7 @@ func Default() Config {
 			WorkerConcurrency:      4,
 			ShutdownTimeoutSeconds: 30,
 		},
-		Security: SecurityConfig{Callbacks: CallbackConfig{
+		Security: HardenedSecurityConfig{Callbacks: CallbackConfig{
 			MaxTTLSeconds:    int(callback.DefaultOptions.MaxTTL / time.Second),
 			ClockSkewSeconds: int(callback.DefaultOptions.ClockSkew / time.Second),
 			ReplayCapacity:   4096,
@@ -100,7 +106,7 @@ func Default() Config {
 	}
 }
 
-func (c Config) Validate() error {
+func (c HardenedConfig) Validate() error {
 	if c.Version != CurrentVersion {
 		return fmt.Errorf("%w: got %d want %d", ErrUnsupportedVersion, c.Version, CurrentVersion)
 	}
@@ -128,7 +134,7 @@ func (c Config) Validate() error {
 	return nil
 }
 
-func (c ServerConfig) Validate() error {
+func (c HardenedServerConfig) Validate() error {
 	host, _, err := net.SplitHostPort(c.Listen)
 	if err != nil {
 		return fmt.Errorf("config: invalid server listen address: %w", err)
