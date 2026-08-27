@@ -14,6 +14,8 @@ import (
 const (
 	PinnedGremlinsVersion    = "v0.6.0"
 	PinnedGovulncheckVersion = "v1.7.0"
+	PinnedCycloneDXVersion   = "v1.10.0"
+	PinnedTrivyVersion       = "v0.74.0"
 )
 
 var fullCommitSHA = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
@@ -72,6 +74,27 @@ func VerifySupplyChain(root string) (SupplyChainReport, error) {
 		report.Findings = append(report.Findings, Finding{ID: "workflow-set-empty", Severity: SeverityBlocker, Path: ".github/workflows", Message: "no workflow YAML files found"})
 	}
 
+	securityWorkflowPath := filepath.Join(workflowRoot, "security.yml")
+	securityWorkflow, err := os.ReadFile(securityWorkflowPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			report.Findings = append(report.Findings, Finding{ID: "security-workflow-missing", Severity: SeverityBlocker, Path: ".github/workflows/security.yml", Message: "SBOM and repository security qualification workflow is missing"})
+		} else {
+			return SupplyChainReport{}, fmt.Errorf("read security workflow: %w", err)
+		}
+	} else {
+		requireExactPin(&report, "trivy-workflow-pin-drift", ".github/workflows/security.yml", string(securityWorkflow), "version: "+PinnedTrivyVersion)
+	}
+
+	dependabotPath := filepath.Join(abs, ".github", "dependabot.yml")
+	if _, err := os.Stat(dependabotPath); err != nil {
+		if os.IsNotExist(err) {
+			report.Findings = append(report.Findings, Finding{ID: "dependabot-missing", Severity: SeverityBlocker, Path: ".github/dependabot.yml", Message: "dependency update automation is missing"})
+		} else {
+			return SupplyChainReport{}, fmt.Errorf("stat dependabot config: %w", err)
+		}
+	}
+
 	makefile, err := os.ReadFile(filepath.Join(abs, "Makefile"))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -83,6 +106,7 @@ func VerifySupplyChain(root string) (SupplyChainReport, error) {
 		text := string(makefile)
 		requireExactPin(&report, "gremlins-pin-drift", "Makefile", text, "GREMLINS_VERSION := "+PinnedGremlinsVersion)
 		requireExactPin(&report, "govulncheck-pin-drift", "Makefile", text, "GOVULNCHECK_VERSION := "+PinnedGovulncheckVersion)
+		requireExactPin(&report, "cyclonedx-pin-drift", "Makefile", text, "CYCLONEDX_GOMOD_VERSION := "+PinnedCycloneDXVersion)
 		if strings.Contains(text, "@latest") {
 			report.Findings = append(report.Findings, Finding{ID: "floating-go-tool", Severity: SeverityBlocker, Path: "Makefile", Message: "go tool installation contains forbidden @latest reference"})
 		}
@@ -97,7 +121,10 @@ func VerifySupplyChain(root string) (SupplyChainReport, error) {
 			return SupplyChainReport{}, fmt.Errorf("read supply-chain policy: %w", err)
 		}
 	} else {
-		requireExactPin(&report, "govulncheck-policy-drift", "docs/security/SUPPLY_CHAIN.md", string(policy), "golang.org/x/vuln/cmd/govulncheck@"+PinnedGovulncheckVersion)
+		text := string(policy)
+		requireExactPin(&report, "govulncheck-policy-drift", "docs/security/SUPPLY_CHAIN.md", text, "golang.org/x/vuln/cmd/govulncheck@"+PinnedGovulncheckVersion)
+		requireExactPin(&report, "cyclonedx-policy-drift", "docs/security/SUPPLY_CHAIN.md", text, "github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@"+PinnedCycloneDXVersion)
+		requireExactPin(&report, "trivy-policy-drift", "docs/security/SUPPLY_CHAIN.md", text, "Trivy `"+PinnedTrivyVersion+"`")
 	}
 
 	floating, err := scanExecutableLatestRefs(abs)
@@ -107,7 +134,7 @@ func VerifySupplyChain(root string) (SupplyChainReport, error) {
 	report.Findings = append(report.Findings, floating...)
 
 	if len(report.Findings) == 0 {
-		report.Findings = append(report.Findings, Finding{ID: "supply-chain-clean", Severity: SeverityInfo, Message: "workflow actions and engineering tools are pinned to reviewed immutable versions"})
+		report.Findings = append(report.Findings, Finding{ID: "supply-chain-clean", Severity: SeverityInfo, Message: "workflow actions, scanners, SBOM tooling and dependency automation match reviewed immutable policy"})
 	}
 	sort.SliceStable(report.Findings, func(i, j int) bool {
 		if report.Findings[i].Severity != report.Findings[j].Severity {
