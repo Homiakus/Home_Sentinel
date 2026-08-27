@@ -21,8 +21,8 @@ func (s mapSecrets) Resolve(ctx context.Context, ref SecretRef) ([]byte, error) 
 	return []byte(value), nil
 }
 
-func TestDefaultConfigValidAndLoopbackOnlyWithoutTLS(t *testing.T) {
-	cfg := Default()
+func TestDefaultHardenedConfigValidAndLoopbackOnlyWithoutTLS(t *testing.T) {
+	cfg := DefaultHardened()
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("default config invalid: %v", err)
 	}
@@ -54,15 +54,15 @@ func TestDecodeIsStrictAndBounded(t *testing.T) {
 	}
 }
 
-func TestApplyEnvOverlaysReferencesNotSecretBytes(t *testing.T) {
-	cfg := Default()
+func TestApplyHardenedEnvOverlaysReferencesNotSecretBytes(t *testing.T) {
+	cfg := DefaultHardened()
 	values := map[string]string{
 		"HOME_SENTINEL_LISTEN":                 "127.0.0.1:9090",
 		"HOME_SENTINEL_DATA_ROOT":              "/data/sentinel",
 		"HOME_SENTINEL_CALLBACK_ENABLED":       "true",
 		"HOME_SENTINEL_CALLBACK_ACTIVE_KEY_ID": "k2",
 	}
-	if err := ApplyEnv(&cfg, func(key string) (string, bool) {
+	if err := ApplyHardenedEnv(&cfg, func(key string) (string, bool) {
 		value, ok := values[key]
 		return value, ok
 	}); err != nil {
@@ -74,7 +74,7 @@ func TestApplyEnvOverlaysReferencesNotSecretBytes(t *testing.T) {
 }
 
 func TestCallbackKeyringResolvesSecretRefsAndSanitizedConfigDoesNotContainKey(t *testing.T) {
-	cfg := Default()
+	cfg := DefaultHardened()
 	cfg.Security.Callbacks.Enabled = true
 	cfg.Security.Callbacks.ActiveKeyID = "current"
 	cfg.Security.Callbacks.Keys = map[string]SecretRef{
@@ -104,18 +104,18 @@ func TestCallbackKeyringResolvesSecretRefsAndSanitizedConfigDoesNotContainKey(t 
 		t.Fatal("secret reference missing from diagnostics")
 	}
 
-	// Standard JSON marshaling is also safe because Config has no raw secret field.
+	// Standard JSON marshaling is also safe because HardenedConfig has no raw secret field.
 	raw, err := json.Marshal(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(raw), strings.Repeat("c", 32)) {
-		t.Fatal("secret value entered Config")
+		t.Fatal("secret value entered HardenedConfig")
 	}
 }
 
 func TestMissingSecretFailsClosedWithoutLeakingOtherValues(t *testing.T) {
-	cfg := Default().Security.Callbacks
+	cfg := DefaultHardened().Security.Callbacks
 	cfg.Enabled = true
 	cfg.ActiveKeyID = "current"
 	cfg.Keys = map[string]SecretRef{"current": {Env: "MISSING_CALLBACK_KEY"}}
