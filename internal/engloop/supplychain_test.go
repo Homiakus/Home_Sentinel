@@ -34,7 +34,7 @@ func TestVerifySupplyChainRejectsMutableActionRef(t *testing.T) {
 	if !report.HasBlockers() {
 		t.Fatal("mutable action ref was accepted")
 	}
-	if !hasFinding(report.Findings, "action-ref-mutable") {
+	if !hasSupplyChainFinding(report.Findings, "action-ref-mutable") {
 		t.Fatalf("missing mutable-action finding: %+v", report.Findings)
 	}
 }
@@ -49,7 +49,7 @@ func TestVerifySupplyChainRejectsFloatingGoInstall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !report.HasBlockers() || !hasFinding(report.Findings, "floating-go-tool") {
+	if !report.HasBlockers() || !hasSupplyChainFinding(report.Findings, "floating-go-tool") {
 		t.Fatalf("floating go install was accepted: %+v", report.Findings)
 	}
 }
@@ -68,7 +68,7 @@ func TestVerifySupplyChainRejectsPinDrift(t *testing.T) {
 		t.Fatal("tool pin drift was accepted")
 	}
 	for _, id := range []string{"gremlins-pin-drift", "govulncheck-pin-drift", "govulncheck-policy-drift"} {
-		if !hasFinding(report.Findings, id) {
+		if !hasSupplyChainFinding(report.Findings, id) {
 			t.Fatalf("missing %s: %+v", id, report.Findings)
 		}
 	}
@@ -85,7 +85,7 @@ func writeSupplyChainFixture(t *testing.T, root, rel, content string) {
 	}
 }
 
-func hasFinding(findings []Finding, id string) bool {
+func hasSupplyChainFinding(findings []Finding, id string) bool {
 	for _, finding := range findings {
 		if finding.ID == id {
 			return true
