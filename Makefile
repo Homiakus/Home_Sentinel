@@ -1,9 +1,11 @@
-GREMLINS_VERSION ?= v0.6.0
+GREMLINS_VERSION := v0.6.0
+GOVULNCHECK_VERSION := v1.7.0
 TOOLS_DIR ?= .tools
 ARTIFACTS_DIR ?= .artifacts
 ENGLOOP := go run ./cmd/sentinel-engloop
+SUPPLYCHAIN := go run ./cmd/sentinel-supplychain
 
-.PHONY: fmt vet test test-race check engloop-reconcile engloop-strict engloop-gates edge-suite gremlins-install mutation-diff
+.PHONY: fmt vet test test-race check engloop-reconcile engloop-strict engloop-gates edge-suite supply-chain govulncheck-install govulncheck gremlins-install mutation-diff
 
 fmt:
 	gofmt -w $$(find . -name '*.go' -not -path './vendor/*')
@@ -31,6 +33,16 @@ edge-suite:
 	@test -n "$(MODEL)" || (echo 'MODEL is required, e.g. docs/testing/edge-model.example.json' && exit 2)
 	$(ENGLOOP) edge --file "$(MODEL)"
 
+supply-chain:
+	$(SUPPLYCHAIN) --root .
+
+govulncheck-install:
+	mkdir -p "$(TOOLS_DIR)"
+	GOBIN="$(CURDIR)/$(TOOLS_DIR)" go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+
+govulncheck: govulncheck-install
+	"$(TOOLS_DIR)/govulncheck" ./...
+
 gremlins-install:
 	mkdir -p "$(TOOLS_DIR)"
 	GOBIN="$(CURDIR)/$(TOOLS_DIR)" go install github.com/go-gremlins/gremlins/cmd/gremlins@$(GREMLINS_VERSION)
@@ -45,4 +57,5 @@ check:
 	@test -z "$$(gofmt -l $$(find . -name '*.go' -not -path './vendor/*'))" || (echo 'gofmt required' && gofmt -l $$(find . -name '*.go' -not -path './vendor/*') && exit 1)
 	go vet ./...
 	go test ./...
+	$(SUPPLYCHAIN) --root .
 	$(ENGLOOP) reconcile --root .
