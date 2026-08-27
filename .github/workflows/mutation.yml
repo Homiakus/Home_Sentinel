@@ -1,0 +1,80 @@
+name: mutation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  critical-diff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: .go-version
+          cache: true
+
+      - name: Determine diff and engineering gates
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base="origin/${{ github.base_ref }}"
+            git diff --name-only "${base}...HEAD" > /tmp/engloop-changed.txt
+          else
+            if git rev-parse HEAD^ >/dev/null 2>&1; then
+              base="HEAD^"
+              git diff --name-only HEAD^ HEAD > /tmp/engloop-changed.txt
+            else
+              base="$(git rev-list --max-parents=0 HEAD)"
+              git ls-files > /tmp/engloop-changed.txt
+            fi
+          fi
+
+          if [[ ! -s /tmp/engloop-changed.txt ]]; then
+            echo '{"risk":"LOW","gates":["static","unit"],"mutation_targets":[]}' > /tmp/engloop-gates.json
+          else
+            go run ./cmd/sentinel-engloop gates --changed-file /tmp/engloop-changed.txt > /tmp/engloop-gates.json
+          fi
+          cat /tmp/engloop-gates.json
+
+          risk="$(jq -r '.risk' /tmp/engloop-gates.json)"
+          targets="$(jq -r '.mutation_targets | length' /tmp/engloop-gates.json)"
+          echo "risk=${risk}" >> "$GITHUB_OUTPUT"
+          echo "base=${base}" >> "$GITHUB_OUTPUT"
+          if [[ "$targets" -gt 0 ]]; then
+            echo "mutation=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "mutation=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Critical diff mutation testing
+        if: steps.plan.outputs.mutation == 'true'
+        env:
+          BASE: ${{ steps.plan.outputs.base }}
+        run: make mutation-diff BASE="$BASE"
+
+      - name: Upload mutation evidence
+        if: always() && steps.plan.outputs.mutation == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: gremlins-${{ github.sha }}
+          path: .artifacts/gremlins.json
+          if-no-files-found: error
+          retention-days: 14
