@@ -3,6 +3,12 @@ module github.com/Homiakus/Home_Sentinel
 go 1.26
 
 require (
+	github.com/coder/websocket v1.8.15
+	github.com/eclipse/paho.golang v0.23.0
+	modernc.org/sqlite v1.57.0
+)
+
+require (
 	github.com/DataDog/zstd v1.4.5 // indirect
 	github.com/Homiakus/axiom v0.0.0-20260821100144-7682ba9170dd // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
