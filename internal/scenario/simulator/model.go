@@ -25,22 +25,22 @@ type HypotheticalEffect struct {
 }
 
 type TraceStep struct {
-	StepID      string          `json:"stepId"`
-	Kind        string          `json:"kind"`
-	SystemOwned bool            `json:"systemOwned"`
-	Outcome     string          `json:"outcome"` // "MATCH", "CONDITION_TRUE", "CONDITION_FALSE", "WOULD_EXECUTE", "WAITED", "APPROVED", "REJECTED", "TIMEOUT", "STOPPED"
-	Inputs      map[string]any  `json:"inputs,omitempty"`
-	Explanation string          `json:"explanation"`
-	Timestamp   time.Time       `json:"timestamp"`
+	StepID      string         `json:"stepId"`
+	Kind        string         `json:"kind"`
+	SystemOwned bool           `json:"systemOwned"`
+	Outcome     string         `json:"outcome"` // "MATCH", "CONDITION_TRUE", "CONDITION_FALSE", "WOULD_EXECUTE", "WAITED", "APPROVED", "REJECTED", "TIMEOUT", "STOPPED"
+	Inputs      map[string]any `json:"inputs,omitempty"`
+	Explanation string         `json:"explanation"`
+	Timestamp   time.Time      `json:"timestamp"`
 }
 
 type SimulationContext struct {
-	Mode            SimulationMode         `json:"mode"`
-	TriggerEvent    map[string]model.Value `json:"triggerEvent,omitempty"`
-	HomeState       map[string]model.Value `json:"homeState,omitempty"`
-	HumanApprovals  map[string]bool        `json:"humanApprovals,omitempty"` // stepID -> approve/reject
-	SimulatedTime   time.Time              `json:"simulatedTime"`
-	Timezone        string                 `json:"timezone,omitempty"`
+	Mode           SimulationMode         `json:"mode"`
+	TriggerEvent   map[string]model.Value `json:"triggerEvent,omitempty"`
+	HomeState      map[string]model.Value `json:"homeState,omitempty"`
+	HumanApprovals map[string]bool        `json:"humanApprovals,omitempty"` // stepID -> approve/reject
+	SimulatedTime  time.Time              `json:"simulatedTime"`
+	Timezone       string                 `json:"timezone,omitempty"`
 }
 
 type SimulationResult struct {

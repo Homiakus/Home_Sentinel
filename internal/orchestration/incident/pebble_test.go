@@ -16,7 +16,7 @@ func TestIncidentSurvivesPebbleReopen(t *testing.T) {
 	notifier := gatewayfake.NewNotifier()
 	config := Config{
 		Production: adgo.DefaultProductionConfig(root),
-		WorkerID: "pebble-test-worker", WorkerConcurrency: 1,
+		WorkerID:   "pebble-test-worker", WorkerConcurrency: 1,
 	}
 
 	firstService, err := Open(config, Dependencies{Notifier: notifier})

@@ -15,7 +15,7 @@ func openMemory(t *testing.T, controller *gatewayfake.SirenController, duration 
 	t.Helper()
 	service, err := Open(Config{
 		Production: adgo.ProductionConfig{Backend: adgo.BackendMemory},
-		WorkerID: "siren-test", WorkerConcurrency: 1, MaxActivationDuration: duration,
+		WorkerID:   "siren-test", WorkerConcurrency: 1, MaxActivationDuration: duration,
 	}, Dependencies{Siren: controller})
 	if err != nil {
 		t.Fatalf("open siren: %v", err)

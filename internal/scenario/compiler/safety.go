@@ -19,7 +19,7 @@ type SafetyAnalysisResult struct {
 }
 
 const (
-	MaxSirenDuration = 5 * time.Minute
+	MaxSirenDuration     = 5 * time.Minute
 	DefaultActionTimeout = 30 * time.Second
 )
 

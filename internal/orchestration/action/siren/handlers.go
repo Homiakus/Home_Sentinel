@@ -66,7 +66,7 @@ func setEnabled(controller gateway.SirenController, desired bool) adgo.ActivityH
 			)
 		}
 		return adgo.ActivityResult{
-			Facts: map[string]any{"siren_enabled": desired, "siren_provider_id": result.ProviderID},
+			Facts:   map[string]any{"siren_enabled": desired, "siren_provider_id": result.ProviderID},
 			Outcome: adgo.OutcomeCompleted,
 		}, nil
 	}

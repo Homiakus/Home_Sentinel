@@ -8,11 +8,11 @@ import (
 )
 
 type ResolvedCapabilities struct {
-	Descriptors       map[string]capability.Descriptor
-	ReferencedEntities []model.EntityRef
+	Descriptors         map[string]capability.Descriptor
+	ReferencedEntities  []model.EntityRef
 	RequiredPermissions []string
-	PhysicalResources []string
-	CapabilityVersions map[string]string
+	PhysicalResources   []string
+	CapabilityVersions  map[string]string
 }
 
 // ResolveCapabilities validates that all referenced capabilities exist in the registry and are compatible.

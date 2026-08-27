@@ -11,11 +11,11 @@ import (
 )
 
 var (
-	ErrMissingID       = errors.New("event: missing id")
-	ErrMissingKind     = errors.New("event: missing kind")
-	ErrMissingSource   = errors.New("event: missing source")
-	ErrInvalidTime     = errors.New("event: invalid timestamps")
-	ErrFutureEvent     = errors.New("event: occurred_at is after received_at beyond tolerated clock skew")
+	ErrMissingID     = errors.New("event: missing id")
+	ErrMissingKind   = errors.New("event: missing kind")
+	ErrMissingSource = errors.New("event: missing source")
+	ErrInvalidTime   = errors.New("event: invalid timestamps")
+	ErrFutureEvent   = errors.New("event: occurred_at is after received_at beyond tolerated clock skew")
 )
 
 const MaxClockSkew = 5 * time.Minute

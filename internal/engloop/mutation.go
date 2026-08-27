@@ -28,9 +28,9 @@ type MutationFinding struct {
 }
 
 type MutationReport struct {
-	ToolEfficacy      float64           `json:"tool_efficacy"`
-	MutantsTotal      int               `json:"mutants_total"`
-	CriticalBlockers  []MutationFinding `json:"critical_blockers"`
+	ToolEfficacy     float64           `json:"tool_efficacy"`
+	MutantsTotal     int               `json:"mutants_total"`
+	CriticalBlockers []MutationFinding `json:"critical_blockers"`
 	NonCriticalLived []MutationFinding `json:"noncritical_lived"`
 }
 

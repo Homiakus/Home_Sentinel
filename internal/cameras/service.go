@@ -177,4 +177,3 @@ func (s *Service) OnboardUVC(ctx context.Context, in UVCOnboardRequest) (Camera,
 	}
 	return res.Value, nil
 }
-

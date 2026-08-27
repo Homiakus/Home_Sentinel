@@ -12,11 +12,11 @@ import (
 )
 
 type Catalog struct {
-	mu          sync.RWMutex
-	records     map[string]*ScenarioRecord
-	compiler    *compiler.Compiler
-	deps        *DependencyGraph
-	timeSource  func() time.Time
+	mu         sync.RWMutex
+	records    map[string]*ScenarioRecord
+	compiler   *compiler.Compiler
+	deps       *DependencyGraph
+	timeSource func() time.Time
 }
 
 func NewCatalog(comp *compiler.Compiler) *Catalog {

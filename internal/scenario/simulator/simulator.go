@@ -27,12 +27,12 @@ func (s *Simulator) Simulate(scen model.Scenario, ctx SimulationContext, clock C
 	_ = manifest
 	if diags.HasErrors() {
 		return &SimulationResult{
-			ScenarioID: string(scen.ID),
-			RevisionID: string(scen.RevisionID),
-			Mode:       ctx.Mode,
-			Passed:     false,
+			ScenarioID:   string(scen.ID),
+			RevisionID:   string(scen.RevisionID),
+			Mode:         ctx.Mode,
+			Passed:       false,
 			FinalOutcome: "COMPILATION_FAILED",
-			Errors:     []string{diags.Error()},
+			Errors:       []string{diags.Error()},
 		}, nil
 	}
 

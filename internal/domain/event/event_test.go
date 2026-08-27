@@ -9,7 +9,7 @@ func TestEnvelopeValidate(t *testing.T) {
 	now := time.Now().UTC()
 	valid := Envelope{
 		ID: "evt-1", Kind: "vision.person.detected.v1",
-		Source: Source{ID: "front", Type: "camera"},
+		Source:     Source{ID: "front", Type: "camera"},
 		OccurredAt: now, ReceivedAt: now,
 	}
 	if err := valid.Validate(); err != nil {

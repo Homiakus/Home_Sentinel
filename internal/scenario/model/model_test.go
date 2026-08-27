@@ -141,7 +141,7 @@ func TestDuplicateNestedStepIDFails(t *testing.T) {
 		Kind: StepIf,
 		If: &IfStep{
 			Condition: Expr{Op: "literal", Value: &literal},
-			Then: Flow{Steps: []Step{{ID: "notify", Kind: StepStop, Stop: &StopStep{Outcome: StopCompleted}}}},
+			Then:      Flow{Steps: []Step{{ID: "notify", Kind: StepStop, Stop: &StopStep{Outcome: StopCompleted}}}},
 		},
 	})
 	if err := scenario.Validate(); err == nil {
@@ -171,14 +171,14 @@ func sampleScenario(t *testing.T) Scenario {
 		Description: "Notify when an unknown person appears while away.",
 		Triggers: []Trigger{
 			{
-				ID:   "trigger-person",
-				Kind: TriggerDeviceEvent,
+				ID:         "trigger-person",
+				Kind:       TriggerDeviceEvent,
 				Capability: CapabilityRef{ID: "camera.person.detected", Version: "1.0.0", Entity: &EntityRef{ID: "front-camera", Kind: "camera"}},
 				Parameters: map[string]Value{"min_confidence": confidence},
 			},
 			{
-				ID:   "trigger-manual",
-				Kind: TriggerManual,
+				ID:         "trigger-manual",
+				Kind:       TriggerManual,
 				Capability: CapabilityRef{ID: "core.manual", Version: "1.0.0"},
 			},
 		},

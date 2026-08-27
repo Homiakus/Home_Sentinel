@@ -10,10 +10,10 @@ import (
 )
 
 var (
-	ErrNotFound      = errors.New("catalog: scenario or revision not found")
-	ErrConflict      = errors.New("catalog: optimistic concurrency conflict (stale ETag/version)")
-	ErrImmutable     = errors.New("catalog: published revision is immutable")
-	ErrNotValidated  = errors.New("catalog: scenario has compilation errors and cannot be published")
+	ErrNotFound        = errors.New("catalog: scenario or revision not found")
+	ErrConflict        = errors.New("catalog: optimistic concurrency conflict (stale ETag/version)")
+	ErrImmutable       = errors.New("catalog: published revision is immutable")
+	ErrNotValidated    = errors.New("catalog: scenario has compilation errors and cannot be published")
 	ErrDependencyInUse = errors.New("catalog: dependency is currently in use by active scenarios")
 )
 
@@ -36,12 +36,12 @@ const (
 )
 
 type AuditEntry struct {
-	Timestamp time.Time `json:"timestamp"`
-	Actor     string    `json:"actor"`
-	Action    string    `json:"action"` // e.g. "create_draft", "update_draft", "publish", "rollback", "disable", "archive"
-	Reason    string    `json:"reason,omitempty"`
-	RevisionID string   `json:"revisionId,omitempty"`
-	Version   int       `json:"version,omitempty"`
+	Timestamp  time.Time `json:"timestamp"`
+	Actor      string    `json:"actor"`
+	Action     string    `json:"action"` // e.g. "create_draft", "update_draft", "publish", "rollback", "disable", "archive"
+	Reason     string    `json:"reason,omitempty"`
+	RevisionID string    `json:"revisionId,omitempty"`
+	Version    int       `json:"version,omitempty"`
 }
 
 type SimulationSummary struct {
@@ -52,20 +52,20 @@ type SimulationSummary struct {
 }
 
 type Revision struct {
-	ScenarioID     string             `json:"scenarioId"`
-	RevisionID     string             `json:"revisionId"`
-	Version        int                `json:"version"` // Monotonically increasing published version (1, 2, ...) or 0 for drafts
-	State          RevisionState      `json:"state"`
-	ETag           string             `json:"etag"`
-	Author         string             `json:"author"`
-	CreatedAt      time.Time          `json:"createdAt"`
-	UpdatedAt      time.Time          `json:"updatedAt"`
-	PublishedAt    *time.Time         `json:"publishedAt,omitempty"`
-	PublishedBy    string             `json:"publishedBy,omitempty"`
-	PublishReason  string             `json:"publishReason,omitempty"`
-	Scenario       model.Scenario     `json:"scenario"`
-	Manifest       *compiler.Manifest `json:"manifest,omitempty"`
-	Simulation     *SimulationSummary `json:"simulation,omitempty"`
+	ScenarioID    string             `json:"scenarioId"`
+	RevisionID    string             `json:"revisionId"`
+	Version       int                `json:"version"` // Monotonically increasing published version (1, 2, ...) or 0 for drafts
+	State         RevisionState      `json:"state"`
+	ETag          string             `json:"etag"`
+	Author        string             `json:"author"`
+	CreatedAt     time.Time          `json:"createdAt"`
+	UpdatedAt     time.Time          `json:"updatedAt"`
+	PublishedAt   *time.Time         `json:"publishedAt,omitempty"`
+	PublishedBy   string             `json:"publishedBy,omitempty"`
+	PublishReason string             `json:"publishReason,omitempty"`
+	Scenario      model.Scenario     `json:"scenario"`
+	Manifest      *compiler.Manifest `json:"manifest,omitempty"`
+	Simulation    *SimulationSummary `json:"simulation,omitempty"`
 }
 
 type ScenarioRecord struct {

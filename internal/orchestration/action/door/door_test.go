@@ -14,7 +14,7 @@ func openMemory(t *testing.T, controller gateway.DoorController) *Service {
 	t.Helper()
 	service, err := Open(Config{
 		Production: adgo.ProductionConfig{Backend: adgo.BackendMemory},
-		WorkerID: "door-test", WorkerConcurrency: 1,
+		WorkerID:   "door-test", WorkerConcurrency: 1,
 	}, Dependencies{Door: controller})
 	if err != nil {
 		t.Fatalf("open: %v", err)

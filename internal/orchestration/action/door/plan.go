@@ -32,8 +32,8 @@ func CompilePlan() (*adgo.Plan, error) {
 	apply := func(id, next string) adgo.Node {
 		return adgo.Node{
 			ID: id, Kind: adgo.NodeActivity, Activity: ActivityApply,
-			Requires: []string{"request"},
-			Next:     []adgo.Transition{{To: next}},
+			Requires:       []string{"request"},
+			Next:           []adgo.Transition{{To: next}},
 			ExternalEffect: true,
 			Risk:           adgo.RiskMedium,
 			Timeout:        10 * time.Second,

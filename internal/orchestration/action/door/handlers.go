@@ -66,7 +66,7 @@ func applyDesiredState(controller gateway.DoorController) adgo.ActivityHandler {
 		}
 		if before == request.Desired {
 			return adgo.ActivityResult{
-				Facts: map[string]any{"door_effect": gateway.EffectAlreadyApplied, "door_state": request.Desired},
+				Facts:   map[string]any{"door_effect": gateway.EffectAlreadyApplied, "door_state": request.Desired},
 				Outcome: adgo.OutcomeCompleted,
 			}, nil
 		}

@@ -14,18 +14,18 @@ const (
 )
 
 type ExternalEffectSpec struct {
-	CapabilityID   string                     `json:"capabilityId"`
-	ResourceKey    string                     `json:"resourceKey"`
-	Permission     string                     `json:"permission"`
-	Risk           model.RiskLevel            `json:"risk"`
-	Idempotency    string                     `json:"idempotency"`
-	Timeout        time.Duration              `json:"timeout"`
-	MaxRetries     int                        `json:"maxRetries"`
-	DesiredState   map[string]any             `json:"desiredState,omitempty"`
-	ReadBeforeWrite bool                      `json:"readBeforeWrite"`
-	VerifyAfterWrite bool                     `json:"verifyAfterWrite"`
-	Reconciliation bool                       `json:"reconciliation"`
-	Compensation   string                     `json:"compensation"`
+	CapabilityID     string          `json:"capabilityId"`
+	ResourceKey      string          `json:"resourceKey"`
+	Permission       string          `json:"permission"`
+	Risk             model.RiskLevel `json:"risk"`
+	Idempotency      string          `json:"idempotency"`
+	Timeout          time.Duration   `json:"timeout"`
+	MaxRetries       int             `json:"maxRetries"`
+	DesiredState     map[string]any  `json:"desiredState,omitempty"`
+	ReadBeforeWrite  bool            `json:"readBeforeWrite"`
+	VerifyAfterWrite bool            `json:"verifyAfterWrite"`
+	Reconciliation   bool            `json:"reconciliation"`
+	Compensation     string          `json:"compensation"`
 }
 
 type SafetyAugmentation struct {
@@ -38,11 +38,11 @@ type SafetyAugmentation struct {
 }
 
 type TemporalRequirement struct {
-	Kind        string        `json:"kind"` // e.g. "schedule", "debounce", "throttle", "wait", "timeout"
-	Spec        string        `json:"spec"`
-	Duration    time.Duration `json:"duration,omitempty"`
-	Timezone    string        `json:"timezone,omitempty"`
-	Durable     bool          `json:"durable"`
+	Kind     string        `json:"kind"` // e.g. "schedule", "debounce", "throttle", "wait", "timeout"
+	Spec     string        `json:"spec"`
+	Duration time.Duration `json:"duration,omitempty"`
+	Timezone string        `json:"timezone,omitempty"`
+	Durable  bool          `json:"durable"`
 }
 
 type MigrationInfo struct {

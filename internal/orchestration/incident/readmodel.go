@@ -21,16 +21,16 @@ type TimelineEntry struct {
 }
 
 type IncidentView struct {
-	ID            string                 `json:"id"`
-	PlanVersion   string                 `json:"planVersion"`
-	PlanDigest    string                 `json:"planDigest"`
-	Version       uint64                 `json:"version"`
-	Status        string                 `json:"status"`
-	Failure       string                 `json:"failure,omitempty"`
-	Waiting       map[string]string      `json:"waiting,omitempty"`
-	Risk          domainincident.Risk    `json:"risk,omitempty"`
+	ID             string                 `json:"id"`
+	PlanVersion    string                 `json:"planVersion"`
+	PlanDigest     string                 `json:"planDigest"`
+	Version        uint64                 `json:"version"`
+	Status         string                 `json:"status"`
+	Failure        string                 `json:"failure,omitempty"`
+	Waiting        map[string]string      `json:"waiting,omitempty"`
+	Risk           domainincident.Risk    `json:"risk,omitempty"`
 	RiskAssessment *riskpolicy.Assessment `json:"riskAssessment,omitempty"`
-	Timeline      []TimelineEntry        `json:"timeline"`
+	Timeline       []TimelineEntry        `json:"timeline"`
 }
 
 type ExplanationView struct {

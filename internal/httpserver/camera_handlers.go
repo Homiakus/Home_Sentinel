@@ -195,4 +195,3 @@ func (s *Server) cameraOnboardUVC(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 201, cam)
 }
-

@@ -25,12 +25,12 @@ const (
 // HS-SCN-9xx — internal compiler invariants
 const (
 	// HS-SCN-1xx
-	CodeInvalidScenarioID   = "HS-SCN-101"
-	CodeInvalidStepID       = "HS-SCN-102"
-	CodeEmptyFlow           = "HS-SCN-103"
-	CodeDuplicateStepID     = "HS-SCN-104"
-	CodeMalformedStructure  = "HS-SCN-105"
-	CodeMissingPayload      = "HS-SCN-106"
+	CodeInvalidScenarioID  = "HS-SCN-101"
+	CodeInvalidStepID      = "HS-SCN-102"
+	CodeEmptyFlow          = "HS-SCN-103"
+	CodeDuplicateStepID    = "HS-SCN-104"
+	CodeMalformedStructure = "HS-SCN-105"
+	CodeMissingPayload     = "HS-SCN-106"
 
 	// HS-SCN-2xx
 	CodeTypeMismatch        = "HS-SCN-201"
@@ -42,11 +42,11 @@ const (
 	CodeUnitMismatch        = "HS-SCN-207"
 
 	// HS-SCN-3xx
-	CodeCapabilityNotFound  = "HS-SCN-301"
+	CodeCapabilityNotFound     = "HS-SCN-301"
 	CodeCapabilityIncompatible = "HS-SCN-302"
-	CodeCapabilityUnavailable = "HS-SCN-303"
-	CodeEntityNotFound      = "HS-SCN-304"
-	CodeEntityKindMismatch  = "HS-SCN-305"
+	CodeCapabilityUnavailable  = "HS-SCN-303"
+	CodeEntityNotFound         = "HS-SCN-304"
+	CodeEntityKindMismatch     = "HS-SCN-305"
 
 	// HS-SCN-4xx
 	CodeInvalidDuration     = "HS-SCN-401"
@@ -55,25 +55,25 @@ const (
 	CodeOverlappingSchedule = "HS-SCN-404"
 
 	// HS-SCN-5xx
-	CodePermissionDenied    = "HS-SCN-501"
-	CodeHighRiskUnapproved  = "HS-SCN-502"
-	CodeMissingSafetyGate   = "HS-SCN-503"
-	CodeResourceContention  = "HS-SCN-504"
+	CodePermissionDenied       = "HS-SCN-501"
+	CodeHighRiskUnapproved     = "HS-SCN-502"
+	CodeMissingSafetyGate      = "HS-SCN-503"
+	CodeResourceContention     = "HS-SCN-504"
 	CodeUnboundedSirenDuration = "HS-SCN-505"
 	CodeDisallowedSystemUnlock = "HS-SCN-506"
 
 	// HS-SCN-6xx
-	CodeUnreachableStep     = "HS-SCN-601"
-	CodeImpossibleBranch    = "HS-SCN-602"
-	CodeSelfRecursion       = "HS-SCN-603"
-	CodeMutualRecursion     = "HS-SCN-604"
-	CodeOppositeDesiredState = "HS-SCN-605"
-	CodeCircularDependency  = "HS-SCN-606"
+	CodeUnreachableStep             = "HS-SCN-601"
+	CodeImpossibleBranch            = "HS-SCN-602"
+	CodeSelfRecursion               = "HS-SCN-603"
+	CodeMutualRecursion             = "HS-SCN-604"
+	CodeOppositeDesiredState        = "HS-SCN-605"
+	CodeCircularDependency          = "HS-SCN-606"
 	CodeDuplicateIrreversibleAction = "HS-SCN-607"
 
 	// HS-SCN-7xx
 	CodeAxiomUnsupportedFeature = "HS-SCN-701"
-	CodeADGOLoweringFailed     = "HS-SCN-702"
+	CodeADGOLoweringFailed      = "HS-SCN-702"
 
 	// HS-SCN-9xx
 	CodeCompilerInvariantBroken = "HS-SCN-901"

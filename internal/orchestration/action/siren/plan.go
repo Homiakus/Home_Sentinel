@@ -44,8 +44,8 @@ func CompilePlan(maxActivation time.Duration) (*adgo.Plan, error) {
 			},
 			{
 				ID: NodeEnable, Kind: adgo.NodeActivity, Activity: ActivityEnable,
-				Requires: []string{"request", "request_valid"},
-				Next: []adgo.Transition{{To: NodeSafety}},
+				Requires:       []string{"request", "request_valid"},
+				Next:           []adgo.Transition{{To: NodeSafety}},
 				ExternalEffect: true,
 				Risk:           adgo.RiskMedium,
 				Timeout:        10 * time.Second,
@@ -61,8 +61,8 @@ func CompilePlan(maxActivation time.Duration) (*adgo.Plan, error) {
 			},
 			{
 				ID: NodeDisable, Kind: adgo.NodeActivity, Activity: ActivityDisable,
-				Requires: []string{"request"},
-				Next: []adgo.Transition{{To: NodeRecord}},
+				Requires:       []string{"request"},
+				Next:           []adgo.Transition{{To: NodeRecord}},
 				ExternalEffect: true,
 				Risk:           adgo.RiskMedium,
 				Timeout:        10 * time.Second,

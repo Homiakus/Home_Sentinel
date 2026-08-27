@@ -9,10 +9,10 @@ import (
 )
 
 type CameraRecoveryController struct {
-	mu        sync.Mutex
-	network   map[string]bool
-	stream    map[string]bool
-	seen      map[string]gateway.EffectResult
+	mu             sync.Mutex
+	network        map[string]bool
+	stream         map[string]bool
+	seen           map[string]gateway.EffectResult
 	ReconnectCalls int
 }
 

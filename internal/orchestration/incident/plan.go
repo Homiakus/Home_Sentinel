@@ -40,8 +40,8 @@ func CompilePlan() (*adgo.Plan, error) {
 	notify := func(id, next string) adgo.Node {
 		return adgo.Node{
 			ID: id, Kind: adgo.NodeActivity, Activity: ActivityNotify,
-			Requires: []string{"risk", "incident_summary"},
-			Next:     []adgo.Transition{{To: next}},
+			Requires:       []string{"risk", "incident_summary"},
+			Next:           []adgo.Transition{{To: next}},
 			ExternalEffect: true,
 			Risk:           adgo.RiskMedium,
 			Timeout:        10 * time.Second,
@@ -71,20 +71,20 @@ func CompilePlan() (*adgo.Plan, error) {
 			{
 				ID: NodeNormalize, Kind: adgo.NodeActivity, Activity: ActivityNormalize,
 				Requires: []string{"trigger"}, Produces: []string{"trigger_valid"},
-				Next: []adgo.Transition{{To: NodeCorrelate}},
+				Next:                []adgo.Transition{{To: NodeCorrelate}},
 				ExpectedQualityGain: 0.1, CriticalPathWeight: 5,
 			},
 			{
 				ID: NodeCorrelate, Kind: adgo.NodeActivity, Activity: ActivityCorrelate,
 				Requires: []string{"trigger_valid"}, Produces: []string{"evidence_count"},
-				Next: []adgo.Transition{{To: NodeAssess}},
+				Next:                []adgo.Transition{{To: NodeAssess}},
 				ExpectedQualityGain: 0.2, CriticalPathWeight: 4,
 			},
 			{
 				ID: NodeAssess, Kind: adgo.NodeActivity, Activity: ActivityAssess,
-				Requires: []string{"evidence_count"},
-				Produces: []string{"risk", "risk_score", "risk_assessment", "incident_summary"},
-				Next: []adgo.Transition{{To: NodeRouteRisk}},
+				Requires:            []string{"evidence_count"},
+				Produces:            []string{"risk", "risk_score", "risk_assessment", "incident_summary"},
+				Next:                []adgo.Transition{{To: NodeRouteRisk}},
 				ExpectedQualityGain: 0.3, CriticalPathWeight: 3,
 			},
 			{

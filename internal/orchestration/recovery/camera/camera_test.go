@@ -13,7 +13,7 @@ func openMemory(t *testing.T, controller *gatewayfake.CameraRecoveryController) 
 	t.Helper()
 	service, err := Open(Config{
 		Production: adgo.ProductionConfig{Backend: adgo.BackendMemory},
-		WorkerID: "camera-recovery-test", WorkerConcurrency: 1,
+		WorkerID:   "camera-recovery-test", WorkerConcurrency: 1,
 	}, Dependencies{Controller: controller})
 	if err != nil {
 		t.Fatalf("open: %v", err)

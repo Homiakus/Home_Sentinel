@@ -45,7 +45,7 @@ func CompilePlan() (*adgo.Plan, error) {
 		return adgo.Node{
 			ID: id, Kind: adgo.NodeActivity, Activity: activity,
 			Requires: []string{"request"}, Produces: []string{output},
-			Next: []adgo.Transition{{To: next}},
+			Next:    []adgo.Transition{{To: next}},
 			Timeout: 5 * time.Second, Retry: retry,
 		}
 	}

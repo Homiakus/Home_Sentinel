@@ -17,10 +17,10 @@ import (
 type Status string
 
 const (
-	StatusNewGroup Status = "new_group"
-	StatusUpdated  Status = "updated"
+	StatusNewGroup  Status = "new_group"
+	StatusUpdated   Status = "updated"
 	StatusDuplicate Status = "duplicate"
-	StatusLate     Status = "late"
+	StatusLate      Status = "late"
 )
 
 type Config struct {
