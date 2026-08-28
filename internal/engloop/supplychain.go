@@ -2,7 +2,9 @@ package engloop
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -19,6 +21,16 @@ const (
 )
 
 var fullCommitSHA = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
+
+type ActionPin struct {
+	Version string `json:"version"`
+	SHA     string `json:"sha"`
+}
+
+type ActionPinManifest struct {
+	SchemaVersion int                  `json:"schema_version"`
+	Actions       map[string]ActionPin `json:"actions"`
+}
 
 type SupplyChainReport struct {
 	Root     string    `json:"root"`
@@ -43,6 +55,17 @@ func VerifySupplyChain(root string) (SupplyChainReport, error) {
 	}
 	report := SupplyChainReport{Root: abs}
 
+	pinsPath := filepath.Join(abs, "docs", "security", "CI_ACTION_PINS.json")
+	pins, pinErr := loadActionPinManifest(pinsPath)
+	if pinErr != nil {
+		report.Findings = append(report.Findings, Finding{
+			ID:       "action-pin-manifest-invalid",
+			Severity: SeverityBlocker,
+			Path:     "docs/security/CI_ACTION_PINS.json",
+			Message:  pinErr.Error(),
+		})
+	}
+
 	workflowRoot := filepath.Join(abs, ".github", "workflows")
 	entries, err := os.ReadDir(workflowRoot)
 	if err != nil {
@@ -64,7 +87,7 @@ func VerifySupplyChain(root string) (SupplyChainReport, error) {
 		}
 		workflowCount++
 		rel := filepath.ToSlash(filepath.Join(".github", "workflows", entry.Name()))
-		findings, err := verifyWorkflowActions(filepath.Join(workflowRoot, entry.Name()), rel)
+		findings, err := verifyWorkflowActions(filepath.Join(workflowRoot, entry.Name()), rel, pins.Actions)
 		if err != nil {
 			return SupplyChainReport{}, err
 		}
@@ -125,6 +148,7 @@ func VerifySupplyChain(root string) (SupplyChainReport, error) {
 		requireExactPin(&report, "govulncheck-policy-drift", "docs/security/SUPPLY_CHAIN.md", text, "golang.org/x/vuln/cmd/govulncheck@"+PinnedGovulncheckVersion)
 		requireExactPin(&report, "cyclonedx-policy-drift", "docs/security/SUPPLY_CHAIN.md", text, "github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@"+PinnedCycloneDXVersion)
 		requireExactPin(&report, "trivy-policy-drift", "docs/security/SUPPLY_CHAIN.md", text, "Trivy `"+PinnedTrivyVersion+"`")
+		requireExactPin(&report, "action-pin-policy-unbound", "docs/security/SUPPLY_CHAIN.md", text, "CI_ACTION_PINS.json")
 	}
 
 	floating, err := scanExecutableLatestRefs(abs)
@@ -148,7 +172,44 @@ func VerifySupplyChain(root string) (SupplyChainReport, error) {
 	return report, nil
 }
 
-func verifyWorkflowActions(path, rel string) ([]Finding, error) {
+func loadActionPinManifest(path string) (ActionPinManifest, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return ActionPinManifest{}, fmt.Errorf("open action pin manifest: %w", err)
+	}
+	defer file.Close()
+
+	decoder := json.NewDecoder(io.LimitReader(file, 1<<20))
+	decoder.DisallowUnknownFields()
+	var manifest ActionPinManifest
+	if err := decoder.Decode(&manifest); err != nil {
+		return ActionPinManifest{}, fmt.Errorf("decode action pin manifest: %w", err)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return ActionPinManifest{}, fmt.Errorf("decode action pin manifest: multiple JSON values")
+		}
+		return ActionPinManifest{}, fmt.Errorf("decode action pin manifest trailing data: %w", err)
+	}
+	if manifest.SchemaVersion != 1 {
+		return ActionPinManifest{}, fmt.Errorf("unsupported schema_version %d", manifest.SchemaVersion)
+	}
+	if len(manifest.Actions) == 0 {
+		return ActionPinManifest{}, fmt.Errorf("action allowlist is empty")
+	}
+	for name, pin := range manifest.Actions {
+		if strings.TrimSpace(name) == "" || strings.TrimSpace(pin.Version) == "" {
+			return ActionPinManifest{}, fmt.Errorf("action %q has an empty name or version", name)
+		}
+		if !fullCommitSHA.MatchString(pin.SHA) {
+			return ActionPinManifest{}, fmt.Errorf("action %q has invalid SHA %q", name, pin.SHA)
+		}
+	}
+	return manifest, nil
+}
+
+func verifyWorkflowActions(path, rel string, pins map[string]ActionPin) ([]Finding, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open workflow %s: %w", rel, err)
@@ -170,7 +231,13 @@ func verifyWorkflowActions(path, rel string) ([]Finding, error) {
 			value = strings.TrimSpace(value[:idx])
 		}
 		value = strings.Trim(value, `"'`)
-		if strings.HasPrefix(value, "./") || strings.HasPrefix(value, "docker://") {
+		if strings.HasPrefix(value, "./") {
+			continue
+		}
+		if strings.HasPrefix(value, "docker://") {
+			if !strings.Contains(value, "@sha256:") {
+				findings = append(findings, Finding{ID: "docker-action-ref-mutable", Severity: SeverityBlocker, Path: rel, Message: fmt.Sprintf("line %d Docker action must use an immutable sha256 digest: %s", lineNo, value)})
+			}
 			continue
 		}
 		at := strings.LastIndexByte(value, '@')
@@ -178,9 +245,18 @@ func verifyWorkflowActions(path, rel string) ([]Finding, error) {
 			findings = append(findings, Finding{ID: "action-ref-missing", Severity: SeverityBlocker, Path: rel, Message: fmt.Sprintf("line %d external action has no immutable ref: %s", lineNo, value)})
 			continue
 		}
-		ref := value[at+1:]
+		actionName, ref := value[:at], value[at+1:]
 		if !fullCommitSHA.MatchString(ref) {
 			findings = append(findings, Finding{ID: "action-ref-mutable", Severity: SeverityBlocker, Path: rel, Message: fmt.Sprintf("line %d external action must use a 40-character commit SHA, got %q", lineNo, ref)})
+			continue
+		}
+		pin, ok := pins[actionName]
+		if !ok {
+			findings = append(findings, Finding{ID: "action-not-reviewed", Severity: SeverityBlocker, Path: rel, Message: fmt.Sprintf("line %d action %s is absent from docs/security/CI_ACTION_PINS.json", lineNo, actionName)})
+			continue
+		}
+		if !strings.EqualFold(pin.SHA, ref) {
+			findings = append(findings, Finding{ID: "action-pin-drift", Severity: SeverityBlocker, Path: rel, Message: fmt.Sprintf("line %d action %s uses %s; reviewed %s pin is %s", lineNo, actionName, ref, pin.Version, pin.SHA)})
 		}
 	}
 	if err := scanner.Err(); err != nil {
