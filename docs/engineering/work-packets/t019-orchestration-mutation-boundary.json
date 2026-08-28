@@ -1,0 +1,44 @@
+{
+  "plan_item": "T-019",
+  "intent": "Make Home Sentinel safety/control orchestration and the engineering gate-policy engine mutation-critical before implementing durable plan routing, so both workflow semantics and the code deciding whether test-of-tests runs cannot silently escape Gremlins.",
+  "status_before": "OPEN",
+  "risk_class": "CRITICAL",
+  "invariants": [
+    "Safety and durable orchestration changes are always classified CRITICAL.",
+    "Engineering-loop gate policy is self-protected by mutation testing.",
+    "A production Go change under internal/orchestration produces an executable mutation target.",
+    "A production Go change under internal/engloop produces an executable mutation target.",
+    "T-004 cannot begin implementation until this taxonomy is verified."
+  ],
+  "contracts": [
+    "ClassifyPaths classifies internal/orchestration and internal/engloop production changes as CRITICAL.",
+    "MutationTargets maps production Go files to their exact package directory and ignores _test.go files.",
+    "GatePlan for both boundaries includes mutation-critical and security.",
+    "The implementation commit changes internal/engloop/model.go and therefore must self-trigger Critical diff mutation testing under the new taxonomy."
+  ],
+  "code_surfaces": [
+    "internal/engloop/model.go",
+    "internal/engloop/model_test.go",
+    "internal/orchestration/incident",
+    "internal/orchestration/action/door",
+    "internal/orchestration/action/siren",
+    "internal/orchestration/recovery/camera",
+    "internal/orchestration/resourceguard",
+    "internal/orchestration/lifecycle"
+  ],
+  "required_gates": [
+    "static",
+    "unit",
+    "race",
+    "mutation-critical",
+    "security"
+  ],
+  "acceptance_evidence": [
+    "engloop tests prove both roots classify CRITICAL",
+    "engloop tests prove exact orchestration and engloop mutation targets",
+    "implementation mutation planner includes ./internal/engloop",
+    "Critical diff mutation testing executes rather than skipping",
+    "Gremlins reports no lived or not-covered blocker for changed taxonomy semantics",
+    "repository ci/security/mutation checks pass on the implementation commit"
+  ]
+}

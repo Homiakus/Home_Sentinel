@@ -1,5 +1,5 @@
 {
-  "packet": "docs/engineering/work-packets/t018-config-mutation-boundary.json",
-  "mutation_base": "ef8ecaf44d114c5e6341dab5fa6b869952407421",
-  "max_commits": 8
+  "packet": "docs/engineering/work-packets/t019-orchestration-mutation-boundary.json",
+  "mutation_base": "26b28f4505f7b4cd4059c14d310b326b97cdef50",
+  "max_commits": 4
 }
