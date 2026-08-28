@@ -26,7 +26,7 @@ The authoritative execution protocol is `docs/engineering/ENGINEERING_LOOP.md`; 
 - Stage 11 — operator read model, durable timeline, Explain and Diagnostics.
 - Stage 12 — threat model; HMAC callbacks; key ID, iat/exp/maxTTL/skew; keyring rotation overlap; bounded replay guard.
 - Stage 13 — correlation/risk/callback benchmarks; CI module verify, fmt, vet, unit, race and benchmark smoke.
-- Stage 14a — `go.sum` is committed in the observed `main`; remaining Stage 14 work is module-hygiene enforcement, dependency/supply-chain gates and workflow action pinning.
+- Stage 14b — dependency/supply-chain baseline is CI-enforced: committed `go.sum`, clean `go mod tidy`/`go mod verify`, reviewed immutable GitHub Action allowlist, pinned security tools, `govulncheck`, Trivy HIGH/CRITICAL qualification, CycloneDX module SBOM evidence and Dependabot. Release provenance/reproducibility/signing remains coupled to Stage 27 release qualification.
 - Stage 16a — typed fail-closed configuration and secret-reference loading baseline exists.
 - Stage 20a — single-writer durable resource reservation: Door, Siren and Camera Recovery reject a second non-terminal execution for the same physical resource; different resources remain parallel; terminal executions release ownership; concurrent Start race is covered.
 - Stage 28 — Canonical Scenario Model: strict headless AST, stable scenario/revision/step identity, typed capability references, semantic flow nodes, strict decode, deterministic normalization and semantic digest, clone-to-draft, nested duplicate detection and fuzz baseline.
@@ -41,7 +41,7 @@ The authoritative execution protocol is `docs/engineering/ENGINEERING_LOOP.md`; 
 - Stage 33 — Scenario Catalog: immutable draft/validate/simulate/publish lifecycle, optimistic concurrency ETag control, rollback without history mutation, audit logs and active-execution version pinning.
 - Stage 33b — Dependency Index: bidirectional dependency graph (scenario <-> capabilities, entities, subflows, templates), fail-closed protection against active dependency removal.
 - Stage 34 — Headless Simulator: pure simulation, replay and what-if analysis with virtual clock manipulation, hypothetical WOULD_EXECUTE side effects with zero real gateway calls and safety-node trace projections.
-- Engineering loop baseline — `cmd/sentinel-engloop` + `internal/engloop` now provide roadmap reconciliation, Work Packet validation, risk/gate planning and machine validation of critical mutation evidence.
+- Engineering loop baseline — `cmd/sentinel-engloop` + `internal/engloop` provide roadmap reconciliation, Work Packet validation, risk/gate planning, multidimensional constrained t-way edge-suite generation, critical mutation evidence validation and executable supply-chain self-verification.
 
 ## Scenario authoring audit
 
@@ -72,33 +72,32 @@ Scenario AST, UI and AI layer do not replace Axiom/ADGO and cannot bypass gatewa
 ## Important audit findings
 
 1. Stage 20a closes same-process/same-store cross-execution reservation, including human/reconciliation waits and restart reconstruction from durable executions. **Multi-process fencing is not claimed complete**: Stage 24 still requires a single-writer startup lock for v1 or a true distributed admission/fencing protocol before multi-writer topology is supported.
-2. Stage 14 module lock now exists (`go.sum`); clean `go mod tidy`/`go mod verify`, dependency security, action pinning, SBOM/provenance and reproducible-build evidence still need their own gates before Stage 14 can be called complete.
-3. Callback crypto exists, but authenticated ingress + RBAC + binding to the actual waiting workflow node are not yet claimed complete by the production master plan.
+2. Stage 14 dependency hygiene and repository qualification are now executable gates: module lock/hygiene, reviewed Action SHA allowlist, pinned scanners, `govulncheck`, Trivy and module SBOM generation are proven on `main`. Release artifact provenance, reproducible-build evidence, checksums/signing and rollback qualification remain Stage 27 concerns rather than reasons to reopen dependency hygiene.
+3. Stage 17 is **PARTIAL**: session authentication, CSRF, security headers, capability RBAC and callback HMAC/replay primitives exist, but authenticated callback ingress bound to the actual waiting workflow node, authorization-decision audit, explicit user/service/system principal semantics and end-to-end exactly-once resume are not yet proven.
 4. Plan/schema migration policy, backup/restore and release rollback remain required production stages.
 5. Observability exposes read-model diagnostics but full metrics/SLO/exporters/runbooks remain production work.
 6. Capability Registry treats provider offline as health/availability state, not deletion; removal fails closed while entities or scenarios depend on a capability.
 7. Temporal semantics define DST/timezone policy, but durable debounce/throttle/repeat/schedule execution still requires runtime/lowering and simulator evidence where applicable.
-8. Mutation quality is now a separate test-of-tests gate. Critical `LIVED`, `NOT COVERED` or `TIMED OUT` mutations are not acceptable evidence for closing safety-sensitive work.
+8. Mutation quality is a separate test-of-tests gate. Critical `LIVED`, `NOT COVERED` or `TIMED OUT` mutations are not acceptable evidence for closing safety-sensitive work.
 
 ## Next implementation order
 
 Core production safety:
 
-1. Finish Stage 14 — enforce clean `go mod tidy`, `go mod verify`, dependency/supply-chain checks and reviewed pinned CI toolchain/actions.
-2. Stage 17 — authenticated ingress and RBAC; complete integration with Stage 16 config/secrets.
-3. Stage 15 — plan/schema catalog and migration compatibility.
-4. Stage 18/23/24 — backup/restore, exhaustive crash matrix, backpressure/degraded mode and explicit process-topology gate.
+1. Stage 17 — complete authenticated ingress/RBAC principal contract, callback binding/replay/audit and exactly-once workflow resume; integrate with Stage 16 config/secrets.
+2. Stage 15 — plan/schema catalog and migration compatibility.
+3. Stage 18/23/24 — backup/restore, exhaustive crash matrix, backpressure/degraded mode and explicit process-topology gate.
 
 Scenario product work can proceed only where production prerequisites allow it:
 
-5. Stage 35 — authenticated Scenario API only after Stage 17 is proven.
-6. Stage 36/38/40/37/41 — authoring UX, templates/trace/graph/mobile without bypassing catalog/compiler/safety contracts.
-7. Stage 39 — LLM authoring only through the stable structured AST/validator/compiler boundary.
+4. Stage 35 — authenticated Scenario API only after Stage 17 is proven.
+5. Stage 36/38/40/37/41 — authoring UX, templates/trace/graph/mobile without bypassing catalog/compiler/safety contracts.
+6. Stage 39 — LLM authoring only through the stable structured AST/validator/compiler boundary.
 
 Integration/release:
 
-8. Stage 21/22/26 — real adapters, observability and measured target-hardware budgets.
-9. Stage 27 + Scenario Stage 42 — release/upgrade/rollback and scenario release gates, including mutation/edge-space evidence.
+7. Stage 21/22/26 — real adapters, observability and measured target-hardware budgets.
+8. Stage 27 + Scenario Stage 42 — release/upgrade/rollback, provenance/reproducibility and scenario release gates, including mutation/edge-space evidence.
 
 Index: `docs/PLAN_INDEX.md`.
 Engineering protocol: `docs/engineering/ENGINEERING_LOOP.md`.
