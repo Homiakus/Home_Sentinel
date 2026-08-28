@@ -1,15 +1,14 @@
 # Home Sentinel — Living MASTER PLAN
 
-> Единственный execution source of truth для progressive audit/implementation loop.
-> Архитектурные intent-документы (`docs/AXIOM_IMPLEMENTATION_PLAN.md`, `docs/SCENARIO_SYSTEM_PLAN.md`) остаются нормативными спецификациями, но выбор, статус и порядок работ определяются здесь и сверяются с фактическим `main`.
+> Единственный execution source of truth для progressive audit/implementation loop. Детальные intent-документы (`docs/AXIOM_IMPLEMENTATION_PLAN.md`, `docs/SCENARIO_SYSTEM_PLAN.md`) остаются нормативными спецификациями; findings, приоритет, dependency DAG и статус исполнения определяются здесь и сверяются с фактическим `main`.
 
-**Plan revision:** 2026-08-28 / verified through T-001 `905862f738df655478022570cb57fcf3b97b279e`
+**Plan revision:** 2026-08-28 / verified through T-002 `745f194ffc290b9a84a380899787932c938fad42`
 
 ---
 
 # 1. Mission
 
-Довести Home Sentinel до production-grade локальной security/automation платформы через маленькие доказуемые изменения, сохраняя fail-closed authority boundary, durable side-effect semantics, воспроизводимость, rollback и проверяемую эволюцию данных/API.
+Довести Home Sentinel до production-grade локальной security/automation платформы маленькими доказуемыми изменениями, сохраняя fail-closed authority boundary, durable side-effect semantics, воспроизводимость, rollback и проверяемую эволюцию данных/API.
 
 Рабочий цикл:
 
@@ -19,12 +18,13 @@
 
 # 2. Current State
 
-- Go control plane уже содержит domain/event model, Axiom lifecycle, ADGO durable workflows, auth/authz, persistence/migrations, gateways, recovery, scenario AST/compiler/safety/catalog/simulator.
+- Go control plane содержит domain/event model, Axiom lifecycle, ADGO durable workflows, auth/authz, persistence/migrations, gateways, recovery и scenario AST/compiler/safety/catalog/simulator.
 - Media/data plane отделён от control plane; ML/VLM/LLM не являются authority source.
-- Stage 17 заметно продвинулся относительно recorded status: в `main` присутствуют callback ingress/runtime и durable Telegram notifier с per-recipient receipts.
-- Planning iteration T-001 verified on `905862f738df655478022570cb57fcf3b97b279e`: GitHub Actions `ci`, `security` и `mutation` завершились `success`.
-- Default SQLite runtime directory does not need to pre-exist: `internal/database.Open` creates the parent directory with `os.MkdirAll` before opening a file-backed DB.
-- Локальный clone/build в текущем execution environment недоступен из-за отсутствия outbound DNS к GitHub; поэтому verification использует observed repository + GitHub Actions evidence. Это environment limitation, не product pass/fail.
+- Stage 17 продвинулся дальше записанного `docs/IMPLEMENTATION_STATUS.md`: в `main` присутствуют callback ingress/runtime и durable Telegram notifier с per-recipient receipts.
+- T-001 verified на `905862f738df655478022570cb57fcf3b97b279e`: `ci`, `security`, `mutation` PASS.
+- T-002 verified на `745f194ffc290b9a84a380899787932c938fad42`: runtime SQLite/WAL/SHM удалены из source tree, `/data/*.db*` игнорируется; `security` и `mutation` PASS; первый CI attempt упал на timing-flake `TestManualStopUsesCompensation`, controlled rerun того же commit полностью PASS.
+- Default SQLite directory не обязан существовать: `internal/database.Open` создаёт parent через `os.MkdirAll`.
+- Локальный clone/build в текущем execution environment недоступен из-за отсутствия outbound DNS к GitHub; verification опирается на observed repository + GitHub Actions evidence. Это limitation окружения, не product pass/fail.
 
 # 3. Architecture Map
 
@@ -48,9 +48,9 @@ Axiom lifecycle      ADGO workflows [control plane]
  external effects / physical IO
 
 Persistence:
-- SQLite: application state, migrations, auth/Telegram/receipts and related durable records
-- Pebble/ADGO production storage: durable workflow execution/history
-- content-addressed artifact references: media remains outside workflow state
+- SQLite: application/auth/Telegram/receipt state + migrations
+- Pebble/ADGO: durable workflow execution/history
+- content-addressed references: media stays outside workflow state
 
 Scenario product:
 Scenario AST -> type/temporal checks -> Safety Compiler -> Axiom/ADGO lowering -> Catalog/Simulator
@@ -60,149 +60,114 @@ Primary boundaries: `internal/domain`, `internal/orchestration`, `internal/gatew
 
 # 4. Baseline
 
-Observed baseline, re-verified by T-001 on `905862f...`:
-
-| Gate | Baseline | Evidence/notes |
+| Gate | Baseline | Evidence / notes |
 |---|---|---|
-| build/module hygiene | PASS via CI | `go mod download/verify/list/tidy` + clean diff |
-| formatting | PASS via CI | gofmt check |
-| vet/static | PASS via CI | `go vet ./...` |
-| unit/integration package tests | PASS via CI | `go test ./... -count=1` |
-| race | PASS via CI | `go test -race ./... -count=1` |
-| security | PASS via workflow | govulncheck/Trivy/supply-chain policy as configured |
-| mutation | PASS latest workflow | active Work Packet critical-diff gate |
-| benchmark smoke | PASS via CI | correlation/risk smoke targets |
-| coverage | NOT BASELINED globally | create explicit coverage trend only when it gives actionable signal |
-| flaky tests | no current evidence | must be recorded on first observed nondeterministic failure |
-| full mutation score | NOT CLAIMED | only risk-scoped evidence is authoritative |
-| target-hardware performance | OPEN | Stage 26/production qualification |
+| module/build hygiene | PASS | CI download/verify/list/tidy + clean diff |
+| formatting | PASS | gofmt |
+| vet/static | PASS | `go vet ./...` |
+| unit/integration | PASS | `go test ./... -count=1` |
+| race | PASS but flaky evidence exists | T-002 attempt 1 timing-failed siren test; identical attempt 2 PASS => F-005 |
+| security | PASS | govulncheck/Trivy/supply-chain workflow as configured |
+| mutation | PASS | active Work Packet critical-diff gate |
+| benchmark smoke | PASS | current CI smoke targets |
+| global coverage | NOT BASELINED | add only with actionable threshold |
+| flaky tests | **KNOWN: F-005** | must be removed before convergence |
+| full mutation score | NOT CLAIMED | risk-scoped evidence is authoritative |
+| target-hardware performance | OPEN | T-008 |
 
-Historical note: the durable-notifier feature commit had a failing mutation workflow; the later Work Packet normalization commit restored the current mutation gate to green. Do not classify that historical failure as an active defect.
+Historical mutation failure on the durable-notifier feature commit was corrected by later Work Packet normalization and is not an active defect.
 
 # 5. System Invariants
 
-I-001. ML/VLM/LLM may produce evidence/facts, never human/physical authority.
-
-I-002. Every external write passes through an invocation gateway with desired-state/idempotency/reconciliation semantics.
-
-I-003. Ambiguous provider outcome is never blindly replayed.
-
-I-004. Human-only authority cannot be obtained by `system` principal or unsigned/unbound callback input.
-
-I-005. Physical resources require durable cross-execution admission; process-local mutex alone is insufficient.
-
-I-006. Published scenario semantics are immutable/version-pinned; Safety Compiler cannot be bypassed.
-
-I-007. Secrets are referenced, not persisted/logged as plaintext values.
-
-I-008. Existing non-terminal durable executions remain continuable across compatible upgrade or fail closed with an explicit migration/restore path.
-
-I-009. Runtime state, credentials, WAL/SHM, artifacts and local operator data are never committed to source control.
-
-I-010. `main` must remain buildable and materially no worse after every iteration.
+- **I-001** ML/VLM/LLM may produce evidence/facts, never human/physical authority.
+- **I-002** Every external write passes through an invocation gateway with desired-state/idempotency/reconciliation semantics.
+- **I-003** Ambiguous provider outcome is never blindly replayed.
+- **I-004** Human-only authority cannot be obtained by `system` principal or unsigned/unbound callback input.
+- **I-005** Physical resources require durable cross-execution admission; process-local mutex alone is insufficient.
+- **I-006** Published scenario semantics are immutable/version-pinned; Safety Compiler cannot be bypassed.
+- **I-007** Secrets are referenced, not persisted/logged as plaintext values.
+- **I-008** Existing non-terminal durable executions remain continuable across compatible upgrade or fail closed with explicit migration/restore.
+- **I-009** Runtime state, credentials, WAL/SHM, artifacts and local operator data are never committed to source control.
+- **I-010** `main` remains buildable and materially no worse after every iteration.
+- **I-011** Critical safety tests must synchronize on observable workflow contracts, not arbitrary scheduler wall-clock luck.
 
 # 6. Findings Registry
 
 ## F-001 — Living execution plan was fragmented
 
-**Status:** Resolved
-
-**Category:** Architecture / Process
-
-**Severity:** High
-
-**Confidence:** Confirmed
-
-**Evidence:** repository used `PLAN_INDEX`, Axiom/scenario plans, implementation snapshots and Work Packets but had no top-level `MASTER_PLAN.md` matching the requested single execution source of truth.
-
-**Files / symbols:** `docs/PLAN_INDEX.md`, `docs/engineering/ENGINEERING_LOOP.md`, `docs/IMPLEMENTATION_STATUS.md`.
-
-**Root cause:** intent, observed status and execution ordering lived in separate documents.
-
-**Impact / blast radius:** stale status can select already-implemented work or miss newly discovered blockers.
-
-**Affected tasks:** T-001.
-
-**Recommended direction:** keep detailed domain plans as specifications; this file owns findings, atomic tasks, ordering and iteration log.
+**Status:** Resolved  
+**Category:** Architecture / Process  
+**Severity:** High  
+**Confidence:** Confirmed  
+**Evidence:** execution intent/status/order were split across plan index, domain plans, status snapshots and Work Packets.  
+**Root cause:** no single reconciliation layer.  
+**Impact:** stale task selection and hidden blockers.  
+**Affected tasks:** T-001.  
+**Resolution:** this file now owns findings/tasks/order/iteration log while detailed plans remain specifications.
 
 ## F-002 — Runtime SQLite database and WAL were tracked by Git
 
-**Status:** Resolved
-
-**Category:** Security / Data hygiene / Reproducibility
-
-**Severity:** High
-
-**Confidence:** Confirmed
-
-**Evidence:** repository tracked `data/sentinel.db`, `data/sentinel.db-shm`, `data/sentinel.db-wal`; default config writes to `data/sentinel.db`; the previous `.gitignore` did not exclude runtime DB/WAL/SHM.
-
-**Files / symbols:** `data/sentinel.db*`, `.gitignore`, `internal/config.Default`, `internal/database.Open`.
-
-**Current behavior after T-002:** default runtime SQLite family is ignored and the three runtime artifacts are removed from the source tree. A clean first boot remains valid because `database.Open` creates the parent directory.
-
-**Root cause:** missing repository-state boundary for default runtime path.
-
-**Impact / blast radius:** prevented future accidental commits of locally-mutated DB/WAL state and removed stale runtime artifacts from the current tree.
-
-**Reproduction:** before T-002 inspect parent commit `905862f...`; after T-002 inspect tracked tree and `/data/*.db*` ignore rule.
-
-**Affected invariants:** I-007, I-009, I-010.
-
-**Affected tasks:** T-002.
-
-**Resolution:** remove tracked runtime DB/WAL/SHM and ignore `/data/*.db*`. No history rewrite or secret rotation was performed because the audit has not established that these binary artifacts contain committed credentials or secret values.
+**Status:** Resolved  
+**Category:** Security / Data hygiene / Reproducibility  
+**Severity:** High  
+**Confidence:** Confirmed  
+**Evidence:** parent tree tracked `data/sentinel.db`, `data/sentinel.db-shm`, `data/sentinel.db-wal`; default path is `data/sentinel.db`; old `.gitignore` did not exclude them.  
+**Files / symbols:** `.gitignore`, `data/sentinel.db*`, `internal/config.Default`, `internal/database.Open`.  
+**Root cause:** missing repository/runtime-state boundary.  
+**Impact:** accidental local state disclosure and nondeterministic diffs.  
+**Affected invariants:** I-007, I-009, I-010.  
+**Affected tasks:** T-002.  
+**Resolution:** current tree removes the three files and ignores `/data/*.db*`; first boot remains valid because the opener creates the parent. No history rewrite/secret rotation without evidence of an actual committed secret.
 
 ## F-003 — Recorded Stage 17 status is stale relative to `main`
 
-**Status:** Planned
-
-**Category:** Correctness / Planning
-
-**Severity:** Medium
-
-**Confidence:** Confirmed
-
-**Evidence:** `docs/IMPLEMENTATION_STATUS.md` still describes Stage 17 as partial while recent commits add durable notifier/callback acceptance/runtime evidence and latest CI/security/mutation are green.
-
-**Root cause:** status snapshot was not reconciled after latest Stage 17 slices.
-
-**Impact:** wrong dependency decisions, especially blocking Stage 35 or duplicating already-closed work.
-
-**Affected tasks:** T-003.
-
-**Recommended direction:** clause-by-clause Stage 17 reconciliation against current code/tests; close only executable evidence, leave remaining clauses explicit.
+**Status:** Planned  
+**Category:** Correctness / Planning  
+**Severity:** Medium  
+**Confidence:** Confirmed  
+**Evidence:** `docs/IMPLEMENTATION_STATUS.md` predates recent callback/notifier/runtime slices.  
+**Root cause:** status snapshot not reconciled after latest Stage 17 commits.  
+**Impact:** wrong dependency decisions or duplicate implementation.  
+**Affected tasks:** T-003.  
+**Recommended direction:** clause-by-clause reconciliation against code/tests; close only executable evidence.
 
 ## F-004 — `main` has no branch protection / required status checks
 
-**Status:** Planned
+**Status:** Planned  
+**Category:** CI/CD / Reliability  
+**Severity:** High  
+**Confidence:** Confirmed  
+**Evidence:** GitHub reports `main protected=false` and no required checks.  
+**Impact:** a direct write can land before post-push CI rejects it.  
+**Affected invariants:** I-010.  
+**Affected tasks:** T-010.  
+**Constraint:** retain the user-mandated direct-to-main iteration workflow without force push or hidden bypass.
 
-**Category:** CI/CD / Reliability
+## F-005 — Siren compensation race test is scheduler-timing flaky
 
-**Severity:** High
-
-**Confidence:** Confirmed
-
-**Evidence:** GitHub reports `main` as `protected=false` with no required checks.
-
-**Current behavior:** direct writes can land before GitHub Actions can reject them.
-
-**Expected behavior:** verified-push discipline must have a technical guard or an equivalent pre-push verification path.
-
-**Impact:** a credentialed automation or human can place broken state on `main` despite green post-push workflows.
-
-**Affected invariants:** I-010.
-
-**Affected tasks:** T-010.
-
-**Compatibility constraint:** user explicitly requires successful iterations to push directly to `main`; protection design must preserve that workflow without force-push or hidden bypass.
+**Status:** Planned  
+**Category:** Testing / Reliability / Concurrency  
+**Severity:** High  
+**Confidence:** Confirmed  
+**Evidence:** on T-002 commit `745f194...`, CI attempt 1 passed unit tests but `go test -race ./... -count=1` failed `internal/orchestration/action/siren.TestManualStopUsesCompensation` after ~1.01 s with `siren was not enabled by worker`; controlled attempt 2 of the exact same commit fully passed. The test blob is identical to previous green commit `905862f...` (`6448bdbe...`).  
+**Files / symbols:** `internal/orchestration/action/siren/siren_test.go`, `Service.Serve`, `Service.Drive`; Axiom `adgo.Production.Serve` / `Engine.RunLocal`.  
+**Current behavior:** the test launches background `Serve`, then polls physical fake state with a hard 1 s deadline.  
+**Expected behavior:** compensation semantics are proved deterministically independent of runner scheduling.  
+**Root cause:** test correctness is coupled to unsynchronized background coordinator/worker startup and polling progress plus arbitrary wall-clock deadlines; race instrumentation can consume that timing budget.  
+**Impact:** critical safety CI can fail spuriously; reruns can normalize ignoring a real regression; current convergence criterion forbids unexplained flakes.  
+**Blast radius:** full `-race` gate and confidence in siren manual-stop compensation.  
+**Reproduction:** compare CI attempt 1 vs controlled attempt 2 on the same SHA.  
+**Affected invariants:** I-010, I-011.  
+**Affected tasks:** T-011; T-003 is temporarily preempted until T-011 closes.  
+**Recommended direction:** use the explicit synchronous workflow contract `Start -> Drive -> observe enabled -> Stop -> Drive -> observe StatusCanceled + disabled`. Axiom `RunLocal` uses the production Engine protocol and removes scheduler-start timing from this semantic test. Preserve Serve lifecycle coverage separately only if no deterministic coverage exists.
 
 # 7. Risk Register
 
 | Risk | Severity | Control / next action |
 |---|---|---|
-| source-controlled runtime DB state | High | RESOLVED by T-002; verify post-push gates |
-| stale Stage 17 closure assumptions | High | T-003 before dependent API work |
+| source-controlled runtime DB state | High | RESOLVED T-002 |
+| flaky siren compensation race gate | High | **T-011 next** |
+| stale Stage 17 closure assumptions | High | T-003 after T-011 |
 | schema/plan upgrade breaks waiting workflows | Critical | T-004 |
 | multi-process physical write race | Critical | T-006 |
 | crash around external-effect linearization | Critical | T-005 |
@@ -212,314 +177,206 @@ I-010. `main` must remain buildable and materially no worse after every iteratio
 
 # 8. Pareto Improvements
 
-Highest-leverage near-term sequence:
-
-1. remove source-controlled runtime state — DONE by T-002;
-2. reconcile Stage 17 to eliminate false blockers and identify exact auth/ingress delta;
-3. close schema/plan versioning before more durable workflows/API surface;
-4. prove crash/recovery + process topology before production physical scale;
-5. only then expand Scenario API/UI and release surface.
+1. Repository/runtime-state boundary — DONE T-002.
+2. Remove known flaky critical safety test — T-011.
+3. Reconcile Stage 17 evidence — T-003.
+4. Pin schema/plan evolution before expanding durable/API surface — T-004.
+5. Prove crash/recovery and process topology before physical scale — T-005/T-006.
+6. Expand Scenario API/UI and release surface only after prerequisites.
 
 # 9. Dependency DAG
 
 ```text
-T-001 living plan [DONE]
-  |
-  +--> T-002 repo runtime-state hygiene [DONE]
-  +--> T-003 Stage17 evidence reconciliation
-          |
-          +--> T-004 schema/plan catalog + migration safety
-          |      |
-          |      +--> T-005 crash/restore matrix
-          |      +--> T-006 process topology/fencing gate
-          |
-          +--> T-007 authenticated Scenario API
+T-001 [DONE]
+  +--> T-002 [DONE]
+  |      +--> T-011 siren deterministic compensation test [READY]
+  |              +--> T-003 Stage17 evidence reconciliation
+  |                      +--> T-004 schema/plan migration safety
+  |                      |      +--> T-005 crash/restore matrix
+  |                      |      +--> T-006 process topology/fencing
+  |                      +--> T-007 authenticated Scenario API
+  +--> T-010 verified-main guard
 
 T-004/T-005/T-006 --> T-009 release/upgrade/rollback qualification
 T-008 target-hardware budgets --> T-009
-T-010 verified-main guard can proceed independently after T-002
 ```
 
 # 10. Implementation Phases
 
-**Phase A — Repository truth & safety hygiene:** T-001..T-003, T-010.
-
-**Phase B — Durable evolution & failure safety:** T-004..T-006.
-
-**Phase C — Product surface:** T-007 plus dependency-safe scenario authoring work from the scenario plan.
-
-**Phase D — Operational qualification:** T-008..T-009, observability/adapters/soak/release gates.
+- **Phase A — Repository truth & safety hygiene:** T-001, T-002, T-011, T-003, T-010.
+- **Phase B — Durable evolution & failure safety:** T-004..T-006.
+- **Phase C — Product surface:** T-007 plus dependency-safe scenario authoring work.
+- **Phase D — Operational qualification:** T-008, T-009, remaining adapters/observability/soak/release gates.
 
 # 11. Atomic Tasks
 
 ## T-001 — Establish the living master plan
 
-**Status:** DONE
-
-**Priority:** P0
-
-**Type:** IMPROVE
-
-**Leverage:** HIGH
-
-### Problem
-Execution truth was fragmented across intent plans, recorded snapshots and Work Packets.
-
-### Goal
-Create this single reconciliation layer without deleting the detailed architecture/product plans.
-
-### Scope
-Audit topology/current plans/current CI; record baseline, findings, risks, DAG and atomic backlog.
-
-### Non-goals
-No production-code change; no reinterpretation of already-proven safety contracts.
-
-### Tests
-Documentation-only change; verify file is present, coherent with observed `main`, and repository workflows remain green after push.
-
-### Acceptance criteria
-All required MASTER PLAN sections exist; current baseline/findings/tasks are explicit.
-
-### Dependencies
-None.
-
-### Risk
-Low.
-
-### Rollback
-Revert this documentation commit.
+**Status:** DONE  
+**Priority:** P0  
+**Type:** IMPROVE  
+**Leverage:** HIGH  
+**Acceptance:** all required plan sections exist; baseline/findings/tasks explicit.  
+**Verification:** post-push `ci`, `security`, `mutation` PASS on `905862f...`.
 
 ## T-002 — Remove tracked runtime SQLite state
 
-**Status:** DONE
+**Status:** DONE  
+**Priority:** P0  
+**Type:** HARDEN  
+**Leverage:** HIGH  
+**Problem:** default DB/WAL/SHM were source-controlled.  
+**Scope:** `.gitignore`, removal of `data/sentinel.db*`, plan reconciliation; no schema/history rewrite.  
+**Implementation:** ignore `/data/*.db*`; remove three runtime artifacts; no `.gitkeep` because DB opener creates parent.  
+**Invariants:** I-007, I-009, I-010.  
+**Acceptance:** current source tree has no default runtime DB artifacts and generated SQLite state is ignored.  
+**Verification:** security PASS, mutation PASS, CI attempt 2 PASS after F-005 classification; attempt 1 failure is recorded as a pre-existing flake, not erased.
 
-**Priority:** P0
+## T-011 — Make siren compensation verification deterministic under `-race`
 
-**Type:** HARDEN
-
+**Status:** READY  
+**Priority:** P0  
+**Type:** HARDEN  
 **Leverage:** HIGH
 
 ### Problem
-Default runtime DB/WAL/SHM were source-controlled.
+`TestManualStopUsesCompensation` relies on unsynchronized background `Serve` progress and fixed 1 s polling deadlines; identical commits can pass or fail under race instrumentation.
+
+### Evidence
+F-005; same SHA failed attempt 1 and passed controlled attempt 2; unchanged test blob also passed prior commit.
 
 ### Goal
-Make runtime persistence impossible to commit accidentally under the default path.
+Prove the actual observable contract `enabled -> cancel requested -> compensation -> canceled + disabled` deterministically.
 
 ### Scope
-`.gitignore`, `data/sentinel.db`, `data/sentinel.db-shm`, `data/sentinel.db-wal`, plan reconciliation.
+`internal/orchestration/action/siren/siren_test.go`; production code only if a missing observable contract makes a test-only solution impossible.
 
 ### Non-goals
-No DB schema migration; no history rewrite; no secret rotation without evidence of a committed secret.
-
-### Files / symbols
-`.gitignore`; `data/sentinel.db*`; `internal/config.Default`; `internal/database.Open`; `MASTER_PLAN.md`.
+No siren plan semantic change, no weakened compensation assertion, no “fix” by merely inflating timeouts.
 
 ### Implementation
-Ignore `/data/*.db*`; remove the three tracked runtime artifacts. Do not add `.gitkeep`: the DB opener creates its parent directory on first boot.
+Prefer `Start -> Drive -> assert enabled -> Stop -> Drive -> assert StatusCanceled -> assert disabled`, because `Drive` maps to Axiom `RunLocal` and keeps production Engine scheduling/commit semantics without background worker startup timing.
 
 ### Invariants
-I-007, I-009, I-010.
+I-003, I-010, I-011 and siren fail-safe compensation.
 
 ### Compatibility constraints
-Default database path remains `data/sentinel.db`; application semantics and schema are unchanged.
+No public API or persisted-state change.
 
 ### Edge cases
-WAL/SHM/journal-like DB siblings; clean first boot with absent `data/`; intentional test fixture DBs outside runtime directory remain unaffected.
+cancel after enable; compensation idempotence; terminal canceled state; fake controller read failure must not be silently ignored in the revised test.
 
 ### Tests
-Repository tree must contain no tracked `data/sentinel.db*`; `.gitignore` must cover generated runtime siblings; standard CI/security/mutation must remain green after push.
+Package/full unit + `go test -race ./... -count=1`; preserve/introduce deterministic Serve cancellation lifecycle coverage only if otherwise absent.
 
 ### Mutation tests
-Not applicable to deletion-only repository hygiene; the repository mutation workflow remains a post-push gate.
+No production mutation target expected for a test-only repair; repository mutation workflow remains mandatory.
 
 ### Benchmarks
 Not applicable.
 
 ### Acceptance criteria
-Default app execution can generate SQLite state without creating trackable source changes under `data/`.
+The test has no scheduler-start polling deadline; it still proves enable occurs before cancellation and compensation disables the siren; full CI/security/mutation are green without relying on rerun for acceptance.
 
 ### Verification commands
-`git ls-files 'data/*.db*'`; `git check-ignore data/sentinel.db data/sentinel.db-wal data/sentinel.db-shm`; standard CI/security/mutation.
+`go test ./internal/orchestration/action/siren -count=1`; `go test -race ./internal/orchestration/action/siren -count=20`; standard repository CI/security/mutation.
 
 ### Dependencies
-T-001.
+T-002.
 
 ### Blocks
-None after implementation; T-010 may now proceed independently.
+T-003 until the known flake is removed.
 
 ### Risk
-Low: no source fixture dependency was found; runtime opener creates the directory itself.
+Low: test-only semantic characterization, provided assertions are preserved.
 
 ### Rollback
-Restore files only if later evidence proves they were intentional source fixtures, and move runtime DB to a separate ignored path first.
+Restore old test only if a stronger deterministic synchronization primitive replaces it.
 
 ### Estimated effort
-Small, one atomic commit.
+Small, one reviewable commit.
 
 ## T-003 — Reconcile Stage 17 against executable evidence
 
-**Status:** READY
-
-**Priority:** P0
-
-**Type:** IMPROVE
-
-**Leverage:** HIGH
-
-### Problem
-Recorded Stage 17 status predates recent implementation slices.
-
-### Goal
-Produce exact open/verified matrix for HTTP safety, authentication, callback binding/replay, principals, RBAC, audit, notifier and exactly-once resume.
-
-### Scope
-Stage 17 code/tests/work packets/status docs only; implement at most one missing clause per follow-up atomic task.
-
-### Tests
-Use existing CI, race, security, callback/notifier mutation/fault evidence; add characterization only for genuinely unproven clauses.
-
-### Acceptance criteria
-No Stage 17 clause is marked complete without executable evidence; dependent tasks know exact prerequisites.
-
-### Dependencies
-T-001.
+**Status:** BLOCKED  
+**Priority:** P0  
+**Type:** IMPROVE  
+**Leverage:** HIGH  
+**Goal:** exact open/verified matrix for HTTP safety, authentication, callback binding/replay, principals, RBAC, audit, notifier and exactly-once resume.  
+**Scope:** Stage 17 code/tests/work packets/status docs; implement at most one missing clause per follow-up task.  
+**Acceptance:** no clause closed without executable evidence.  
+**Dependencies:** T-011.
 
 ## T-004 — Pin durable schemas and workflow plans across upgrade
 
-**Status:** TODO
-
-**Priority:** P0
-
-**Type:** HARDEN
-
-**Leverage:** HIGH
-
-### Goal
-Version external event schemas, persisted lifecycle data and ADGO plans so waiting executions survive compatible upgrade and incompatible evolution fails/migrates explicitly.
-
-### Tests
-Golden compatibility fixtures, waiting-execution upgrade/reopen, unknown/new schema rejection, migration rollback/restore.
-
-### Mutation tests
-Required for validators/version selection/migration guards.
-
-### Dependencies
-T-003.
+**Status:** TODO  
+**Priority:** P0  
+**Type:** HARDEN  
+**Leverage:** HIGH  
+**Goal:** version external schemas, persisted lifecycle state and ADGO plans so waiting executions survive compatible upgrade and incompatible evolution fails/migrates explicitly.  
+**Tests:** golden compatibility fixtures, waiting-execution reopen, unknown schema rejection, migration rollback/restore.  
+**Mutation:** required for validators/version selection/migration guards.  
+**Dependencies:** T-003.
 
 ## T-005 — Prove crash/restore linearization matrix
 
-**Status:** TODO
-
-**Priority:** P0
-
-**Type:** HARDEN
-
-**Leverage:** HIGH
-
-### Goal
-Exercise crash points around durable enqueue/claim/provider accept/local commit, disk failure/corruption and restore for critical workflows/gateways.
-
-### Tests
-Fault injection + replay + restart + restore; no blind resend after ambiguous effect.
-
-### Mutation tests
-Required for recovery state transitions.
-
-### Dependencies
-T-004.
+**Status:** TODO  
+**Priority:** P0  
+**Type:** HARDEN  
+**Leverage:** HIGH  
+**Goal:** fault-inject around enqueue/claim/provider accept/local commit, disk failure/corruption and restore; no blind resend after ambiguous effect.  
+**Mutation:** required for recovery state transitions.  
+**Dependencies:** T-004.
 
 ## T-006 — Enforce supported process topology for physical writes
 
-**Status:** TODO
-
-**Priority:** P0
-
-**Type:** HARDEN
-
-**Leverage:** HIGH
-
-### Goal
-For v1 either enforce a single-writer startup lock or implement a real distributed admission/fencing protocol before multi-writer mode can start.
-
-### Tests
-Concurrent process/admission simulation, stale-owner/fencing, restart, split-brain negative tests.
-
-### Dependencies
-T-004.
+**Status:** TODO  
+**Priority:** P0  
+**Type:** HARDEN  
+**Leverage:** HIGH  
+**Goal:** enforce single-writer startup or real distributed admission/fencing before multi-writer mode.  
+**Tests:** concurrent process/admission, stale owner/fencing, restart, split-brain negative tests.  
+**Dependencies:** T-004.
 
 ## T-007 — Expose authenticated Scenario API without bypasses
 
-**Status:** BLOCKED
-
-**Priority:** P1
-
-**Type:** IMPROVE
-
-**Leverage:** HIGH
-
-### Goal
-Expose catalog/compiler/simulator through authenticated, authorized, bounded HTTP contracts.
-
-### Dependencies
-T-003 and remaining Stage 17 blockers; schema compatibility from T-004 where API persistence depends on it.
+**Status:** BLOCKED  
+**Priority:** P1  
+**Type:** IMPROVE  
+**Leverage:** HIGH  
+**Goal:** authenticated/authorized/bounded catalog/compiler/simulator HTTP contracts.  
+**Dependencies:** T-003 and T-004 where persistence/versioning applies.
 
 ## T-008 — Establish target-hardware performance budgets
 
-**Status:** TODO
-
-**Priority:** P1
-
-**Type:** IMPROVE
-
-**Leverage:** MEDIUM
-
-### Goal
-Measure control-path latency, allocations, DB/Pebble load, queue pressure and degraded-mode thresholds on target hardware.
-
-### Tests / benchmarks
-Reproducible benchmark profiles + soak; fail on agreed significant regressions, not arbitrary micro-deltas.
+**Status:** TODO  
+**Priority:** P1  
+**Type:** IMPROVE  
+**Leverage:** MEDIUM  
+**Goal:** measure control-path latency, allocations, DB/Pebble load, queue pressure and degraded-mode thresholds on target hardware.
 
 ## T-009 — Qualify release, upgrade and rollback
 
-**Status:** BLOCKED
-
-**Priority:** P0
-
-**Type:** HARDEN
-
-**Leverage:** HIGH
-
-### Goal
-Reproducible artifact, SBOM/provenance/checksums/signing policy, pre-upgrade backup, upgrade/rollback/restore drills and release checklist evidence.
-
-### Dependencies
-T-004, T-005, T-006, T-008 and remaining production adapters/observability prerequisites.
+**Status:** BLOCKED  
+**Priority:** P0  
+**Type:** HARDEN  
+**Leverage:** HIGH  
+**Goal:** reproducible artifact, SBOM/provenance/checksums/signing policy, backup, upgrade/rollback/restore drills and release evidence.  
+**Dependencies:** T-004, T-005, T-006, T-008 and remaining production prerequisites.
 
 ## T-010 — Add a technical verified-main guard compatible with direct-main workflow
 
-**Status:** TODO
-
-**Priority:** P1
-
-**Type:** HARDEN
-
-**Leverage:** HIGH
-
-### Problem
-`main` currently accepts direct writes with no required status checks.
-
-### Goal
-Make broken direct-main updates technically difficult while retaining the mandated commit/push-to-main iteration model.
-
-### Scope
-Evaluate repository ruleset/branch protection and/or a canonical local verified-push command; never use force push or weaken CI.
-
-### Tests
-Deliberate failing preflight must block the supported push path; green preflight remains usable.
+**Status:** TODO  
+**Priority:** P1  
+**Type:** HARDEN  
+**Leverage:** HIGH  
+**Problem:** `main` accepts direct writes with no required checks.  
+**Goal:** make broken direct-main updates technically difficult while retaining mandated commit/push-to-main iterations.  
+**Scope:** ruleset/branch protection and/or canonical verified-push path; never force push or weaken CI.
 
 # 12. Testing Strategy
 
-Use risk-based test mesh from `docs/engineering/ENGINEERING_LOOP.md`:
+Risk mesh from `docs/engineering/ENGINEERING_LOOP.md`:
 
 - G0 static/build/module hygiene;
 - G1 deterministic unit/golden;
@@ -531,115 +388,111 @@ Use risk-based test mesh from `docs/engineering/ENGINEERING_LOOP.md`:
 - G7 E2E/HIL/UX;
 - G8 performance/soak/release.
 
-Critical edge space is modeled as:
+Critical edge space:
 
 `input x identity x time x ordering x concurrency x persistence x external failure x authorization x resource ownership x capacity x topology x version x cancellation x recovery`.
 
+Tests for critical semantics must prefer explicit state/contract synchronization over sleeps/deadlines used as a correctness oracle.
+
 # 13. Mutation Testing Strategy
 
-- Risk-scoped Gremlins diff gate remains mandatory for changed critical production packages.
-- Any critical `LIVED`, `NOT COVERED` or `TIMED OUT` mutant blocks task closure unless documented as equivalent/non-actionable with reviewable rationale.
-- Prefer contract-strengthening tests over coverage inflation.
-- Full-module mutation score is not invented as a target until a reproducible baseline exists.
+- Risk-scoped Gremlins critical-diff gate remains mandatory for changed critical production packages.
+- Critical `LIVED`, `NOT COVERED` or `TIMED OUT` mutants block closure unless proven equivalent/non-actionable with reviewable rationale.
+- Strengthen observable contracts instead of inflating coverage.
+- Do not invent a full-module mutation target before a reproducible baseline exists.
 
 # 14. Performance Baselines
 
-Current CI has benchmark smoke for risk/correlation but not a complete product budget. Preserve existing no-regression evidence and implement T-008 before claiming hardware capacity/SLO readiness.
+CI benchmark smoke is green but is not a full capacity/SLO claim. Preserve existing evidence and implement T-008 before target-hardware readiness claims.
 
 # 15. Security Hardening
 
-Priority controls:
+Priority:
+1. repository/runtime-state boundary — DONE T-002;
+2. deterministic critical safety gates — T-011;
+3. Stage 17 auth/ingress/RBAC reconciliation — T-003;
+4. schema/version fail-closed behavior — T-004;
+5. crash/fencing guarantees — T-005/T-006;
+6. release provenance/rollback — T-009.
 
-1. repository/runtime-state boundary — DONE by T-002;
-2. complete/reconcile Stage 17 auth/ingress/RBAC evidence — T-003;
-3. schema/version fail-closed behavior — T-004;
-4. physical-action crash/fencing guarantees — T-005/T-006;
-5. release provenance/rollback — T-009.
-
-Never lower authz, mutation, race or security gates to make an iteration green.
+Never lower authz, race, mutation or security gates to obtain green CI.
 
 # 16. Migration Strategy
 
-For any public/persistent transition:
+`characterize old -> introduce versioned boundary -> dual compatibility -> migrate callers/state -> verify restart/rollback -> remove legacy when no durable dependency remains`.
 
-`characterize old -> introduce versioned boundary -> dual compatibility -> migrate callers/state -> verify restart/rollback -> remove legacy only when no durable dependency remains`.
-
-Destructive migration requires explicit backup/restore evidence and is never bundled as opportunistic cleanup.
+Destructive migration requires explicit backup/restore evidence and is never opportunistic cleanup.
 
 # 17. Deferred Work
 
 - UI polish and broad Scenario authoring UX beyond dependency-safe headless/API foundation.
 - Multi-node topology if v1 explicitly enforces single writer.
-- Full-module mutation campaigns when release/scheduled budget is available.
+- Full-module mutation campaigns when release/scheduled budget exists.
 - Non-critical refactors without measurable risk/complexity/performance leverage.
 
 # 18. Rejected Decisions
 
-- **Rejected:** rewrite existing Axiom/ADGO/scenario plans into one huge duplicated document. Reason: creates drift; this file references them and owns execution state instead.
-- **Rejected:** treat recorded Markdown checkboxes as evidence. Reason: code/tests/CI win over stale status.
-- **Rejected:** fix every audit observation immediately. Reason: all material scope enters Findings + Atomic Tasks first.
-- **Rejected:** force push to repair direct-main conflicts. Reason: forbidden and destroys traceability.
-- **Rejected:** rewrite Git history or rotate credentials solely because binary runtime DB files existed in the tree. Reason: no evidence currently proves a committed secret; preventive source-tree hygiene is the minimal justified change.
+- Rewrite all detailed plans into one duplicated mega-document — rejected: drift risk.
+- Treat Markdown checkboxes as implementation evidence — rejected: code/tests/CI win.
+- Fix every audit observation immediately — rejected: material scope enters Findings/Tasks first.
+- Force push — rejected: breaks traceability and explicit user constraint.
+- Rewrite Git history/rotate credentials only because runtime DB files existed — rejected without evidence of actual committed secret.
+- Accept a green rerun as sufficient resolution of F-005 — rejected: convergence explicitly forbids unexplained flaky tests.
+- Increase siren test timeout as the primary fix — rejected: masks scheduling nondeterminism instead of testing the contract.
 
 # 19. Completed Tasks
 
-- T-001 — established living MASTER PLAN from observed `main` and current CI evidence.
-- T-002 — removed tracked default SQLite runtime state and established an ignore boundary for generated DB/WAL/SHM siblings.
+- T-001 — living MASTER PLAN established and verified.
+- T-002 — tracked default SQLite runtime state removed and verified; incidental race-test flake recorded separately as F-005.
 
 # 20. Iteration Log
 
 ## Iteration 1
 
-**Task:** T-001
-
-**Findings addressed:** F-001
-
-**Unexpected findings:** F-002, F-003, F-004
-
-**Changes:** created `MASTER_PLAN.md`; recorded observed architecture/baseline, invariants, risks, DAG and first atomic backlog.
-
-**Tests:** post-push GitHub Actions `ci`, `security`, `mutation` all PASS on `905862f738df655478022570cb57fcf3b97b279e`.
-
-**Plan changes:** T-002 promoted to first implementation task because tracked runtime SQLite state violated repository/data boundary.
-
-**Commit:** `905862f738df655478022570cb57fcf3b97b279e` — `docs(plan): establish living master plan`
-
-**Push:** main
-
+**Task:** T-001  
+**Findings addressed:** F-001  
+**Unexpected findings:** F-002, F-003, F-004  
+**Changes:** created living `MASTER_PLAN.md`.  
+**Tests:** post-push `ci`, `security`, `mutation` PASS.  
+**Commit:** `905862f738df655478022570cb57fcf3b97b279e` — `docs(plan): establish living master plan`  
+**Push:** main  
 **Result:** PASS
 
 ## Iteration 2
 
-**Task:** T-002
+**Task:** T-002  
+**Findings addressed:** F-002  
+**Unexpected findings:** F-005 during post-push verification  
+**Changes:** `/data/*.db*` ignored; tracked `sentinel.db`, `-shm`, `-wal` removed; first-boot semantics preserved.  
+**Tests:** security PASS; mutation PASS; CI attempt 1 unit/vet/etc. PASS but race step hit F-005; controlled rerun of exact SHA fully PASS including race/engloop/benchmark.  
+**Plan changes:** F-005 separated from T-002 because identical siren code/test passed before and on rerun; T-011 promoted ahead of T-003.  
+**Commit:** `745f194ffc290b9a84a380899787932c938fad42` — `chore(repo): stop tracking runtime sqlite state`  
+**Push:** main  
+**Result:** PASS with F-005 carried as explicit blocker, not ignored
 
-**Findings addressed:** F-002
+## Iteration 3
 
-**Unexpected findings:** none.
-
-**Changes:** added `/data/*.db*` source-control boundary; removed tracked `sentinel.db`, `sentinel.db-shm`, `sentinel.db-wal`; retained the configured path and first-boot behavior because `database.Open` creates the parent directory.
-
-**Tests:** preflight evidence: source tree contained exactly the three runtime SQLite artifacts; default DB path is `data/sentinel.db`; opener creates missing parent. Post-push required gates: `ci`, `security`, `mutation`.
-
-**Plan changes:** F-002 resolved; T-002 DONE; T-003 is next P0 reconciliation task. No history rewrite/secret rotation added without evidence.
-
-**Commit:** `chore(repo): stop tracking runtime sqlite state`
-
-**Push:** main
-
-**Result:** PASS pending post-push workflow confirmation; any failure reopens T-002 immediately.
+**Task:** planning reconciliation for F-005  
+**Findings addressed:** none yet; F-005 recorded and impact-analyzed  
+**Unexpected findings:** none  
+**Changes:** added I-011 and T-011; dependency DAG now blocks T-003 until deterministic siren safety verification is restored.  
+**Tests:** documentation-only planning iteration; standard post-push `ci`, `security`, `mutation` required.  
+**Plan changes:** T-011 becomes next P0.  
+**Commit:** `docs(plan): record siren race-test flake`  
+**Push:** main  
+**Result:** PASS pending post-push confirmation; failure reopens this planning iteration.
 
 # 21. Definition of Final Done
 
-Convergence requires all of the following:
-
+Convergence requires:
 - no known Critical/High findings without explicit accepted deferral;
 - all P0/P1 acceptance criteria verified;
 - durable schema/plan upgrade and rollback proven;
-- critical authority/resource invariants enforced by code/types/persistence/tests;
+- authority/resource invariants enforced by code/types/persistence/tests;
 - security/race/static/fault/mutation gates green for affected semantics;
-- target performance and soak evidence meet explicit budgets;
-- no unexplained flaky tests;
-- runtime state/secrets are outside source control;
+- target performance/soak evidence meets explicit budgets;
+- **no unexplained flaky tests**;
+- runtime state/secrets outside source control;
 - docs/status match observed implementation;
 - final re-audit yields no new fundamental blockers;
-- latest verified state is committed and pushed to `main` without force push.
+- latest verified state committed and pushed to `main` without force push.
