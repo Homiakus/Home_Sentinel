@@ -2,7 +2,6 @@ package callback
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 )
@@ -26,6 +25,15 @@ func (b Binding) Validate() error {
 		return ErrBindingInvalid
 	}
 	return nil
+}
+
+// Matches is deliberately exact: no wildcard or prefix semantics are allowed
+// at the external callback boundary.
+func (b Binding) Matches(claims Claims) bool {
+	return claims.ExecutionID == b.ExecutionID &&
+		claims.NodeID == b.NodeID &&
+		claims.EventID == b.EventID &&
+		claims.Action == b.Action
 }
 
 // Acceptor combines cryptographic verification, exact semantic binding and
@@ -59,8 +67,8 @@ func (a *Acceptor) Accept(token string, expected Binding) (Claims, error) {
 	if err != nil {
 		return Claims{}, err
 	}
-	if claims.ExecutionID != expected.ExecutionID || claims.NodeID != expected.NodeID || claims.EventID != expected.EventID || claims.Action != expected.Action {
-		return Claims{}, fmt.Errorf("%w: execution/node/event/action", ErrBindingMismatch)
+	if !expected.Matches(claims) {
+		return Claims{}, ErrBindingMismatch
 	}
 	now := time.Now().UTC()
 	if a.now != nil {
