@@ -50,9 +50,14 @@ type Claims struct {
 	ExecutionID string `json:"executionId"`
 	NodeID      string `json:"nodeId"`
 	EventID     string `json:"eventId"`
-	Nonce       string `json:"nonce"`
-	IssuedAt    int64  `json:"issuedAt"`
-	ExpiresAt   int64  `json:"expiresAt"`
+	// Action binds a Stage-17 ingress token to the exact callback operation it
+	// may authorize. It remains optional at the Stage-12 crypto primitive so
+	// previously issued/internal tokens can still be verified; Stage-17
+	// Acceptor requires an exact non-empty action binding.
+	Action    string `json:"action,omitempty"`
+	Nonce     string `json:"nonce"`
+	IssuedAt  int64  `json:"issuedAt"`
+	ExpiresAt int64  `json:"expiresAt"`
 }
 
 func (c Claims) Validate(now time.Time) error {
