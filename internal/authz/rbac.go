@@ -8,6 +8,7 @@ const (
 	ViewSystem          Capability = "system:view"
 	ViewLive            Capability = "camera:live"
 	AcknowledgeIncident Capability = "incident:ack"
+	ResolveIncident     Capability = "incident:resolve"
 	ChangeConfig        Capability = "config:change"
 	RunBackup           Capability = "backup:run"
 	UnlockDoor          Capability = "door:unlock"
@@ -17,7 +18,7 @@ const (
 var grants = map[auth.Role]map[Capability]bool{
 	auth.RoleViewer:   {ViewSystem: true, ViewLive: true},
 	auth.RoleOperator: {ViewSystem: true, ViewLive: true, AcknowledgeIncident: true, RunBackup: true},
-	auth.RoleAdmin:    {ViewSystem: true, ViewLive: true, AcknowledgeIncident: true, ChangeConfig: true, RunBackup: true, UnlockDoor: true, ManageUsers: true},
+	auth.RoleAdmin:    {ViewSystem: true, ViewLive: true, AcknowledgeIncident: true, ResolveIncident: true, ChangeConfig: true, RunBackup: true, UnlockDoor: true, ManageUsers: true},
 }
 
 func Allowed(role auth.Role, cap Capability) bool { return grants[role][cap] }
