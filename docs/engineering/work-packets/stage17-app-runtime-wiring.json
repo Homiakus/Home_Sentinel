@@ -1,0 +1,52 @@
+{
+  "plan_item": "Stage 17 / production incident runtime wiring",
+  "intent": "Wire the proven durable Telegram notifier and callback authority into one production ADGO incident runtime owned by App when notification transport is enabled, with deterministic storage location, supervised Serve lifecycle and shutdown ordering that never closes durable orchestration storage while workers are still running.",
+  "status_before": "PARTIAL",
+  "risk_class": "CRITICAL",
+  "invariants": [
+    "Callback signing/verification authority may be initialized independently of Telegram, but callback ingress is exposed only when a corresponding durable incident runtime exists.",
+    "Production incident runtime uses the durable Telegram notifier; nil notifier is never admitted into a running production incident workflow.",
+    "When Telegram notification transport is disabled, App does not start the production incident runtime and IncidentCallbacks remains nil.",
+    "ADGO incident storage is rooted beside the Sentinel database under a deterministic application-managed directory.",
+    "Incident Serve runs under the application lifecycle context and unexpected termination is observable through health/logging.",
+    "App.Close cancels Serve, waits for it to stop, then closes the ADGO production runtime before Telegram and SQLite are closed.",
+    "Partial initialization failures close every already-opened incident runtime and do not leave background workers alive.",
+    "Existing legacy incident aggregation and Frigate recording independence remain unchanged."
+  ],
+  "contracts": [
+    "internal/orchestration/incident Service/Open/Serve/Close",
+    "internal/telegram DurableNotifier and NotificationDeliveryStore",
+    "internal/config callback and Telegram enablement",
+    "internal/app callback authority versus callback ingress boundary",
+    "internal/app App.Open/App.Close lifecycle",
+    "internal/health Registry",
+    "docs/testing/MUTATION_TESTING.md"
+  ],
+  "code_surfaces": [
+    "internal/app/app.go",
+    "internal/app/incident_runtime.go",
+    "internal/app/*_test.go",
+    "docs/engineering/ACTIVE_WORK_PACKET.json"
+  ],
+  "required_gates": [
+    "static",
+    "unit",
+    "property",
+    "race",
+    "contract",
+    "integration",
+    "fault",
+    "mutation-critical",
+    "replay",
+    "security"
+  ],
+  "acceptance_evidence": [
+    "Callbacks enabled while Telegram is disabled still initializes only callback authority; IncidentRuntime and IncidentCallbacks remain nil.",
+    "Telegram-enabled App.Open constructs a DurableNotifier and opens one ADGO incident runtime at the deterministic root.",
+    "Callback ingress is created only when both callback authority and durable incident runtime exist.",
+    "Serve lifecycle starts once, cancellation is clean, and an unexpected Serve failure marks incident runtime health degraded.",
+    "App.Close waits for Serve termination before closing runtime dependencies.",
+    "Open failure after runtime creation leaves no live worker/store and remains restartable.",
+    "Repository CI/race/security remain green and packet-wide mutation testing has no lived/not-covered/timed-out blockers on critical changed surfaces."
+  ]
+}

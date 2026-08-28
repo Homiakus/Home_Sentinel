@@ -289,6 +289,11 @@ func isCriticalSurface(p string) bool {
 		"internal/scenario/compiler/",
 		"internal/scenario/catalog/",
 		"internal/workflow/physical/",
+		// App bootstrap and durable incident lifecycle are an authority boundary:
+		// changing start/stop ordering can expose callback ingress without a
+		// durable workflow or close stores beneath running external-effect work.
+		"internal/app/app.go",
+		"internal/app/incident_runtime",
 		// Durable notifiers are external side-effect gateways even though the
 		// concrete adapter lives with its integration-facing service package.
 		// Missing this prefix would let a CRITICAL work packet request mutation

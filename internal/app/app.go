@@ -31,6 +31,7 @@ import (
 	tgapi "github.com/Homiakus/Home_Sentinel/internal/integrations/telegram"
 	"github.com/Homiakus/Home_Sentinel/internal/intercom"
 	"github.com/Homiakus/Home_Sentinel/internal/locks"
+	orincident "github.com/Homiakus/Home_Sentinel/internal/orchestration/incident"
 	"github.com/Homiakus/Home_Sentinel/internal/realtime"
 	"github.com/Homiakus/Home_Sentinel/internal/repository"
 	searchsvc "github.com/Homiakus/Home_Sentinel/internal/search"
@@ -69,6 +70,8 @@ type App struct {
 	AI                     *ai.Service
 	AIPolicies             ai.PolicyStore
 	Telegram               *tgsvc.Service
+	IncidentRuntime        *orincident.Service
+	IncidentCallbacks      *orincident.CallbackIngress
 	Metrics                *telemetry.Metrics
 	Search                 *searchsvc.Service
 	Watchdog               *watchdog.Manager
@@ -77,6 +80,7 @@ type App struct {
 	BackupRestic           *resticint.Client
 	runCtx                 context.Context
 	runCancel              context.CancelFunc
+	incidentServeDone      chan error
 	started                time.Time
 }
 
@@ -285,6 +289,10 @@ func Open(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error
 			return nil, fmt.Errorf("start Telegram service: %w", err)
 		}
 	}
+	if err := a.startIncidentRuntime(); err != nil {
+		_ = a.Close()
+		return nil, fmt.Errorf("start durable incident runtime: %w", err)
+	}
 	a.startWatchdog()
 	return a, nil
 }
@@ -349,6 +357,9 @@ func (a *App) Close() error {
 	if a.Watchdog != nil {
 		a.Watchdog.Close()
 		a.Watchdog = nil
+	}
+	if err := a.stopIncidentRuntime(); err != nil {
+		return err
 	}
 	if a.Incidents != nil {
 		a.Incidents.Close()
