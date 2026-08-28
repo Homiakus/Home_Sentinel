@@ -13,6 +13,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  GOTOOLCHAIN: local
+
 jobs:
   critical-diff:
     runs-on: ubuntu-latest
@@ -37,6 +40,28 @@ jobs:
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             base="origin/${{ github.base_ref }}"
             git diff --name-only "${base}...HEAD" > /tmp/engloop-changed.txt
+            echo "range_mode=pull-request" >> "$GITHUB_OUTPUT"
+          elif [[ -f docs/engineering/ACTIVE_WORK_PACKET.json ]]; then
+            go run ./cmd/sentinel-engloop active-packet --root . --json > /tmp/engloop-active-packet.json
+            cat /tmp/engloop-active-packet.json
+            base="$(jq -r '.mutation_base' /tmp/engloop-active-packet.json)"
+            max_commits="$(jq -r '.max_commits' /tmp/engloop-active-packet.json)"
+            git cat-file -e "${base}^{commit}" || {
+              echo "active mutation base does not resolve to a commit: ${base}" >&2
+              exit 20
+            }
+            git merge-base --is-ancestor "$base" HEAD || {
+              echo "active mutation base is not an ancestor of HEAD: ${base}" >&2
+              exit 21
+            }
+            commit_count="$(git rev-list --count "${base}..HEAD")"
+            if (( commit_count < 1 || commit_count > max_commits )); then
+              echo "active packet commit range ${commit_count} is outside [1, ${max_commits}]" >&2
+              exit 22
+            fi
+            git diff --name-only "$base" HEAD > /tmp/engloop-changed.txt
+            echo "range_mode=active-work-packet" >> "$GITHUB_OUTPUT"
+            echo "commit_count=${commit_count}" >> "$GITHUB_OUTPUT"
           else
             if git rev-parse HEAD^ >/dev/null 2>&1; then
               base="HEAD^"
@@ -45,6 +70,7 @@ jobs:
               base="$(git rev-list --max-parents=0 HEAD)"
               git ls-files > /tmp/engloop-changed.txt
             fi
+            echo "range_mode=single-commit-fallback" >> "$GITHUB_OUTPUT"
           fi
 
           if [[ ! -s /tmp/engloop-changed.txt ]]; then
