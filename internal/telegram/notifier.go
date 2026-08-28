@@ -145,7 +145,7 @@ func (n *DurableNotifier) Notify(ctx context.Context, op gateway.Operation, in g
 			_ = n.Deliveries.MarkAmbiguous(ctx, frozen.IdempotencyKey, claimedDelivery.Recipient.TelegramUserID)
 			return ambiguousNotificationResult(frozen), nil
 		}
-		if message.MessageID <= 0 {
+		if message.MessageID < 1 {
 			_ = n.Deliveries.MarkAmbiguous(ctx, frozen.IdempotencyKey, claimedDelivery.Recipient.TelegramUserID)
 			return ambiguousNotificationResult(frozen), nil
 		}
