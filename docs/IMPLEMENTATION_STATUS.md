@@ -2,62 +2,56 @@
 
 ## Status semantics
 
-This file is a recorded snapshot, not an independent source of truth. Before selecting or closing work, run:
+This is an observed snapshot, not an independent source of truth. `MASTER_PLAN.md` owns execution order/status. Detailed intent remains in `docs/AXIOM_IMPLEMENTATION_PLAN.md` and `docs/SCENARIO_SYSTEM_PLAN.md`; completion requires executable evidence.
 
-```text
-go run ./cmd/sentinel-engloop reconcile --root . --strict
-```
-
-The authoritative execution protocol is `docs/engineering/ENGINEERING_LOOP.md`; intent comes from `docs/PLAN_INDEX.md` and the linked production/scenario plans, while completion requires executable evidence from the observed checkout.
+Before closing implementation work, run the engineering-loop reconciliation and the applicable CI/security/mutation gates.
 
 ## Current main baseline
 
-- Stage 0 — architecture boundary, ADR and dependency direction.
-- Stage 1 — Go/domain/event/incident/artifact baseline.
-- Stage 2 — gateway desired-state/idempotency contracts and fakes; external `Operation` requires execution + idempotency identity.
-- Stage 3 — Camera lifecycle on ordinary Axiom behind adapter service.
-- Stage 4 — durable Incident ADGO graph with StartOrLoad and waits.
-- Stage 5 — production ADGO wiring and Pebble reopen continuation test.
-- Stage 6 — deterministic explainable risk-v2 and explicit routing.
-- Stage 7 — durable owner human decisions with audit actor/reason/payload.
-- Stage 8 — door/siren desired-state workflows, reconciliation and compensation.
-- Stage 9 — bounded temporal correlation, duplicate/late/out-of-order handling.
-- Stage 10 — bounded camera recovery graph and operator escalation.
-- Stage 11 — operator read model, durable timeline, Explain and Diagnostics.
-- Stage 12 — threat model; HMAC callbacks; key ID, iat/exp/maxTTL/skew; keyring rotation overlap; bounded replay guard.
-- Stage 13 — correlation/risk/callback benchmarks; CI module verify, fmt, vet, unit, race and benchmark smoke.
-- Stage 14b — dependency/supply-chain baseline is CI-enforced: committed `go.sum`, clean `go mod tidy`/`go mod verify`, reviewed immutable GitHub Action allowlist, pinned security tools, `govulncheck`, Trivy HIGH/CRITICAL qualification, CycloneDX module SBOM evidence and Dependabot. Release provenance/reproducibility/signing remains coupled to Stage 27 release qualification.
-- Stage 16a — typed fail-closed configuration and secret-reference loading baseline exists.
-- Stage 20a — single-writer durable resource reservation: Door, Siren and Camera Recovery reject a second non-terminal execution for the same physical resource; different resources remain parallel; terminal executions release ownership; concurrent Start race is covered.
-- Stage 28 — Canonical Scenario Model: strict headless AST, stable scenario/revision/step identity, typed capability references, semantic flow nodes, strict decode, deterministic normalization and semantic digest, clone-to-draft, nested duplicate detection and fuzz baseline.
-- Stage 29 — Capability Registry: versioned capability descriptors, entity/device binding, risk/permission/visibility metadata, typed schemas/UI hints, health without deletion, compatible resolution, dependency-protected removal, deterministic snapshot/digest and discovery filters.
-- Stage 30a — Typed/temporal semantic baseline: canonical typed values and units, TypeRef capability schemas, static expression checking, first-class temporal AST, explicit timezone/DST/catch-up policy and deterministic wall-clock resolution.
-- Stage 30b — Typed expression bindings: ActionStep and SubflowStep arguments use `map[string]Expr` with normalization, reference validation, type inference, capability-schema compatibility validation, default handling and unknown-argument rejection.
-- Stage 31 — Scenario Compiler: pure multi-pass compiler pipeline (Normalize -> Validate -> BuildEnv -> Resolve -> TypeCheck -> Temporal -> SafetyAugment -> StaticConflict -> Classify -> Lower -> Manifest -> Digest), structured diagnostics with HS-SCN-xxx codes and explainable runtime classification.
-- Stage 31a — Axiom Lowering: exact FSM lowering for simple, stateless reactive trigger-action flows.
-- Stage 31b — ADGO Lowering: durable multi-step workflow generation (Activity, Wait, HumanApproval, Fork, Join, Subflow, Gate/Decision, Compensation, ResourceLock).
-- Stage 32 — Safety Compiler: mandatory security boundary generating human approval gates, single-writer resource locks, read-before-write, verify-after-write, maximum-duration clamps and ensure-disabled compensation; separate User Intent Graph and System Graph representations.
-- Stage 32b — Static Conflict Analysis: pre-publish detection of self-recursion, mutual recursion, conflicting desired states on the same resource, unreachable steps and potential trigger-action feedback loops.
-- Stage 33 — Scenario Catalog: immutable draft/validate/simulate/publish lifecycle, optimistic concurrency ETag control, rollback without history mutation, audit logs and active-execution version pinning.
-- Stage 33b — Dependency Index: bidirectional dependency graph (scenario <-> capabilities, entities, subflows, templates), fail-closed protection against active dependency removal.
-- Stage 34 — Headless Simulator: pure simulation, replay and what-if analysis with virtual clock manipulation, hypothetical WOULD_EXECUTE side effects with zero real gateway calls and safety-node trace projections.
-- Engineering loop baseline — `cmd/sentinel-engloop` + `internal/engloop` provide roadmap reconciliation, Work Packet validation, risk/gate planning, multidimensional constrained t-way edge-suite generation, critical mutation evidence validation and executable supply-chain self-verification.
+Implemented/proven foundations include:
+
+- Stages 0–13 core architecture/domain/gateway/Axiom/ADGO/risk/HITL/physical-safety/correlation/recovery/read-model/security primitives and current CI baseline, with residual clauses tracked in the master plan rather than implied complete.
+- Stage 14b supply-chain baseline: committed module lock, module hygiene, reviewed immutable Action allowlist, pinned scanners, `govulncheck`, Trivy, CycloneDX module SBOM evidence and Dependabot. Release provenance/signing/reproducibility remains release qualification work.
+- Stage 16a typed fail-closed callback/security configuration and secret-reference loading baseline.
+- Stage 20a same-store cross-execution physical resource reservation for Door/Siren/Camera Recovery; multi-process fencing remains open.
+- Stages 28–34 headless Scenario foundation: canonical model, capability registry, typed/temporal semantics, compiler, Safety Compiler, static conflicts, immutable catalog/dependency index and simulator/replay.
+- Engineering loop: roadmap reconciliation, Work Packet validation, risk/gate planning, multidimensional edge-suite generation, mutation evidence validation and executable supply-chain self-check.
+
+## Stage 17 — reconciled status
+
+Stage 17 remains **PARTIAL**, but the previous summary was stale. See [`STAGE17_RECONCILIATION.md`](STAGE17_RECONCILIATION.md) for the clause-by-clause evidence matrix.
+
+### Verified now
+
+- HTTP server read-header/read/write/idle timeouts.
+- bounded + strict JSON command decoding through the shared decoder.
+- request IDs.
+- local session authentication baseline.
+- SameSite/HttpOnly cookie behavior, CSRF middleware and CSP/security headers.
+- capability RBAC baseline for viewer/operator/admin; unlock requires the dedicated capability and recent authentication.
+- callback keyring/secret-reference runtime and replay guard.
+- exact callback execution/node/event/action binding.
+- callback human-subject validation against the current persisted user and capability grant.
+- callback authorization allow/deny audit; allowed mutation fails closed if audit persistence fails.
+- durable medium-risk callback redelivery/restart dedupe and high-risk stale-resolution safety.
+- callback exactly-once semantic resume at the orchestration boundary.
+- durable Telegram notifier semantics: frozen recipients, per-recipient receipts, safe retry, ambiguous crash-window handling and no blind resend.
+
+### Still open/partial
+
+1. Production runtime currently does not enforce the hardened non-loopback/TLS rule; plaintext remote bind is possible through `Config`. **F-006 / T-012**.
+2. Secure callback acceptance/orchestration exists but is not wired to an external HTTP callback transport. **F-007 / T-013**.
+3. Principal types do not explicitly distinguish human user/service/system authority; current persisted roles are viewer/operator/admin. **F-008 / T-014**.
+4. Authorization decision auditing is complete on callback path, not a generic HTTP middleware contract; rate limiting is IP-scoped rather than per-principal. **F-009 / T-015**.
+5. Common stale-command ETag/expected-version and HTTP idempotency-key contracts are absent. **F-011 / T-016**.
+6. Browser authentication is a concrete local password/session implementation, not a pluggable local/OIDC/mTLS boundary. **F-010 / T-017**.
+
+Stage 35 authenticated Scenario API remains blocked by the relevant Stage 17 authority/concurrency prerequisites.
 
 ## Scenario authoring audit
 
-Canonical Scenario AST, Capability Registry, typed/temporal semantics, Scenario Compiler, Safety Compiler, Scenario Catalog and Headless Simulator are present as the headless product foundation. Scenario API and UI layer remain open.
+Stages 28–34 are the implemented headless foundation. Remaining product track:
 
-Official product track: [`SCENARIO_SYSTEM_PLAN.md`](SCENARIO_SYSTEM_PLAN.md).
-
-Stages 28-42:
-
-- 28 — Canonical Scenario Model — **implemented baseline**;
-- 29 — Capability Registry — **implemented baseline**;
-- 30 — typed expressions + temporal semantics + argument bindings — **implemented baseline**;
-- 31 — automatic Scenario -> Axiom/ADGO compiler — **implemented baseline**;
-- 32 — mandatory Safety Compiler + static conflict analysis — **implemented baseline**;
-- 33 — immutable Draft/Validate/Simulate/Publish catalog + dependency index — **implemented baseline**;
-- 34 — headless simulation/replay — **implemented baseline**;
 - 35 — authenticated Scenario API;
 - 36 — Simple Builder;
 - 37 — Advanced Flow Editor;
@@ -67,39 +61,30 @@ Stages 28-42:
 - 41 — mobile/adaptive authoring;
 - 42 — scenario quality/security/release gates.
 
-Scenario AST, UI and AI layer do not replace Axiom/ADGO and cannot bypass gateway/RBAC/resource ownership.
+Scenario UI/AI cannot bypass catalog/compiler/Safety Compiler/RBAC/gateway/resource-ownership boundaries.
 
-## Important audit findings
+## Important open production findings
 
-1. Stage 20a closes same-process/same-store cross-execution reservation, including human/reconciliation waits and restart reconstruction from durable executions. **Multi-process fencing is not claimed complete**: Stage 24 still requires a single-writer startup lock for v1 or a true distributed admission/fencing protocol before multi-writer topology is supported.
-2. Stage 14 dependency hygiene and repository qualification are now executable gates: module lock/hygiene, reviewed Action SHA allowlist, pinned scanners, `govulncheck`, Trivy and module SBOM generation are proven on `main`. Release artifact provenance, reproducible-build evidence, checksums/signing and rollback qualification remain Stage 27 concerns rather than reasons to reopen dependency hygiene.
-3. Stage 17 is **PARTIAL**: session authentication, CSRF, security headers, capability RBAC and callback HMAC/replay primitives exist, but authenticated callback ingress bound to the actual waiting workflow node, authorization-decision audit, explicit user/service/system principal semantics and end-to-end exactly-once resume are not yet proven.
-4. Plan/schema migration policy, backup/restore and release rollback remain required production stages.
-5. Observability exposes read-model diagnostics but full metrics/SLO/exporters/runbooks remain production work.
-6. Capability Registry treats provider offline as health/availability state, not deletion; removal fails closed while entities or scenarios depend on a capability.
-7. Temporal semantics define DST/timezone policy, but durable debounce/throttle/repeat/schedule execution still requires runtime/lowering and simulator evidence where applicable.
-8. Mutation quality is a separate test-of-tests gate. Critical `LIVED`, `NOT COVERED` or `TIMED OUT` mutations are not acceptable evidence for closing safety-sensitive work.
+- Multi-process physical-write fencing/topology is not proven; same-store reservation is not a distributed mutex.
+- Durable plan/schema evolution and in-flight execution migration/restore remain P0.
+- Crash/restore linearization around provider effects remains P0.
+- Runtime remote plaintext bind must fail closed before an external callback endpoint is exposed.
+- Branch `main` currently lacks a technical required-check guard.
+- Target-hardware latency/allocation/load budgets remain unqualified.
+- Release provenance, reproducible artifact, signing/checksums and rollback drill remain release work.
 
-## Next implementation order
+## Next dependency-aware order
 
-Core production safety:
+1. T-012 — reject unsafe remote runtime bind until TLS runtime support exists.
+2. T-004 — durable schema/plan catalog and compatible upgrade path; may proceed independently of later HTTP work.
+3. T-013/T-014/T-015/T-016 — close the Stage 17 external transport/principal/audit/concurrency P0 residuals in dependency order.
+4. T-005/T-006 — crash/restore matrix and explicit process topology/fencing.
+5. T-007 / Scenario Stage 35 — authenticated Scenario API after authority/concurrency prerequisites.
+6. T-008/T-009/T-010 — hardware budgets, release qualification and verified-main guard.
+7. T-017 — pluggable authenticator boundary before claiming non-local authentication modes.
 
-1. Stage 17 — complete authenticated ingress/RBAC principal contract, callback binding/replay/audit and exactly-once workflow resume; integrate with Stage 16 config/secrets.
-2. Stage 15 — plan/schema catalog and migration compatibility.
-3. Stage 18/23/24 — backup/restore, exhaustive crash matrix, backpressure/degraded mode and explicit process-topology gate.
-
-Scenario product work can proceed only where production prerequisites allow it:
-
-4. Stage 35 — authenticated Scenario API only after Stage 17 is proven.
-5. Stage 36/38/40/37/41 — authoring UX, templates/trace/graph/mobile without bypassing catalog/compiler/safety contracts.
-6. Stage 39 — LLM authoring only through the stable structured AST/validator/compiler boundary.
-
-Integration/release:
-
-7. Stage 21/22/26 — real adapters, observability and measured target-hardware budgets.
-8. Stage 27 + Scenario Stage 42 — release/upgrade/rollback, provenance/reproducibility and scenario release gates, including mutation/edge-space evidence.
-
-Index: `docs/PLAN_INDEX.md`.
-Engineering protocol: `docs/engineering/ENGINEERING_LOOP.md`.
-Master production plan: `docs/AXIOM_IMPLEMENTATION_PLAN.md`.
-Scenario plan: `docs/SCENARIO_SYSTEM_PLAN.md`.
+Index: `docs/PLAN_INDEX.md`  
+Engineering protocol: `docs/engineering/ENGINEERING_LOOP.md`  
+Production intent: `docs/AXIOM_IMPLEMENTATION_PLAN.md`  
+Scenario intent: `docs/SCENARIO_SYSTEM_PLAN.md`  
+Execution truth: `../MASTER_PLAN.md`
