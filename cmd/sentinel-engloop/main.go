@@ -42,6 +42,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runReconcile(args[1:], stdout, stderr)
 	case "packet":
 		return runPacket(args[1:], stdout, stderr)
+	case "active-packet":
+		return runActivePacket(args[1:], stdout, stderr)
 	case "gates":
 		return runGates(args[1:], stdout, stderr)
 	case "edge":
@@ -113,6 +115,32 @@ func runPacket(args []string, stdout, stderr io.Writer) error {
 		return exitError{code: 3, msg: err.Error()}
 	}
 	fmt.Fprintf(stdout, "VALID %s risk=%s gates=%d invariants=%d\n", packet.PlanItem, packet.RiskClass, len(packet.RequiredGates), len(packet.Invariants))
+	return nil
+}
+
+func runActivePacket(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("active-packet", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	root := fs.String("root", ".", "repository root")
+	jsonOut := fs.Bool("json", false, "write machine-readable active range")
+	if err := fs.Parse(args); err != nil {
+		return exitError{code: 2, msg: err.Error()}
+	}
+	active, packet, err := engloop.LoadActiveWorkPacket(*root)
+	if err != nil {
+		return exitError{code: 3, msg: err.Error()}
+	}
+	if *jsonOut {
+		result := struct {
+			Packet       string            `json:"packet"`
+			PlanItem     string            `json:"plan_item"`
+			RiskClass    engloop.RiskClass `json:"risk_class"`
+			MutationBase string            `json:"mutation_base"`
+			MaxCommits   int               `json:"max_commits"`
+		}{active.Packet, packet.PlanItem, packet.RiskClass, active.MutationBase, active.MaxCommits}
+		return writeJSON(stdout, result)
+	}
+	fmt.Fprintf(stdout, "ACTIVE %s risk=%s base=%s max_commits=%d\n", packet.PlanItem, packet.RiskClass, active.MutationBase, active.MaxCommits)
 	return nil
 }
 
@@ -278,10 +306,11 @@ func parseRisk(s string) (engloop.RiskClass, bool) {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprintln(w, "usage: sentinel-engloop <reconcile|packet|gates|edge|mutation> [flags]")
-	fmt.Fprintln(w, "  reconcile  compare recorded roadmap status with observed checkout")
-	fmt.Fprintln(w, "  packet     validate a machine-readable Work Packet")
-	fmt.Fprintln(w, "  gates      derive risk, gates and mutation targets from changed paths")
-	fmt.Fprintln(w, "  edge       generate a constrained t-way multidimensional edge suite")
-	fmt.Fprintln(w, "  mutation   turn Gremlins JSON into a critical semantic gate")
+	fmt.Fprintln(w, "usage: sentinel-engloop <reconcile|packet|active-packet|gates|edge|mutation> [flags]")
+	fmt.Fprintln(w, "  reconcile     compare recorded roadmap status with observed checkout")
+	fmt.Fprintln(w, "  packet        validate a machine-readable Work Packet")
+	fmt.Fprintln(w, "  active-packet validate the active packet-wide mutation range")
+	fmt.Fprintln(w, "  gates         derive risk, gates and mutation targets from changed paths")
+	fmt.Fprintln(w, "  edge          generate a constrained t-way multidimensional edge suite")
+	fmt.Fprintln(w, "  mutation      turn Gremlins JSON into a critical semantic gate")
 }
