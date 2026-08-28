@@ -65,8 +65,7 @@ func (s *CallbackIngress) OwnerResponse(
 		EventID:     strings.TrimSpace(eventID),
 		Action:      OwnerResponseEvent,
 	}
-	user, _, err := s.authorize(ctx, token, expected, authz.AcknowledgeIncident, meta)
-	if err != nil {
+	if _, _, err := s.authorize(ctx, token, expected, authz.AcknowledgeIncident, meta); err != nil {
 		return nil, err
 	}
 	return s.Workflow.OwnerResponse(ctx, expected.ExecutionID, expected.EventID, payload)
