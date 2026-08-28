@@ -16,6 +16,8 @@ func TestClassifyPaths(t *testing.T) {
 		{name: "api", paths: []string{"internal/api/server.go"}, want: RiskHigh},
 		{name: "authz", paths: []string{"internal/authz/policy.go"}, want: RiskCritical},
 		{name: "security config boundary", paths: []string{"internal/config/model.go"}, want: RiskCritical},
+		{name: "orchestration incident", paths: []string{"internal/orchestration/incident/service.go"}, want: RiskCritical},
+		{name: "engineering gate policy", paths: []string{"internal/engloop/model.go"}, want: RiskCritical},
 		{name: "durable notifier", paths: []string{"internal/telegram/notifier.go"}, want: RiskCritical},
 		{name: "highest wins", paths: []string{"internal/api/server.go", "internal/security/token.go"}, want: RiskCritical},
 	}
@@ -43,13 +45,17 @@ func TestMutationTargetsCriticalProductionOnly(t *testing.T) {
 		"internal/authz/policy_test.go",
 		"internal/config/model.go",
 		"internal/config/model_test.go",
+		"internal/engloop/model.go",
+		"internal/engloop/model_test.go",
+		"internal/orchestration/incident/service.go",
+		"internal/orchestration/incident/service_test.go",
 		"internal/scenario/compiler/compiler.go",
 		"internal/telegram/notifier.go",
 		"internal/telegram/notifier_store.go",
 		"internal/telegram/notifier_test.go",
 		"internal/cameras/model.go",
 	})
-	want := []string{"./internal/authz", "./internal/config", "./internal/scenario/compiler", "./internal/telegram"}
+	want := []string{"./internal/authz", "./internal/config", "./internal/engloop", "./internal/orchestration/incident", "./internal/scenario/compiler", "./internal/telegram"}
 	if len(got) != len(want) {
 		t.Fatalf("MutationTargets()=%v want %v", got, want)
 	}
@@ -78,6 +84,35 @@ func TestConfigSecurityBoundaryAlwaysGetsCriticalMutationGate(t *testing.T) {
 	}
 	if !containsGate(gates, GateSecurity) {
 		t.Fatalf("critical config gate plan missing security: %v", gates)
+	}
+}
+
+func TestControlPlaneSafetyRootsAlwaysGetCriticalMutationGate(t *testing.T) {
+	tests := []struct {
+		name   string
+		path   string
+		target string
+	}{
+		{name: "incident orchestration", path: "internal/orchestration/incident/service.go", target: "./internal/orchestration/incident"},
+		{name: "siren orchestration", path: "internal/orchestration/action/siren/service.go", target: "./internal/orchestration/action/siren"},
+		{name: "camera recovery", path: "internal/orchestration/recovery/camera/service.go", target: "./internal/orchestration/recovery/camera"},
+		{name: "gate policy", path: "internal/engloop/model.go", target: "./internal/engloop"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			paths := []string{tt.path}
+			if got := ClassifyPaths(paths); got != RiskCritical {
+				t.Fatalf("ClassifyPaths(%q)=%s want CRITICAL", tt.path, got)
+			}
+			targets := MutationTargets(paths)
+			if len(targets) != 1 || targets[0] != tt.target {
+				t.Fatalf("MutationTargets(%q)=%v want [%s]", tt.path, targets, tt.target)
+			}
+			gates := GatePlan(paths, ClassifyPaths(paths))
+			if !containsGate(gates, GateMutation) || !containsGate(gates, GateSecurity) {
+				t.Fatalf("critical safety gate plan missing mutation/security: %v", gates)
+			}
+		})
 	}
 }
 

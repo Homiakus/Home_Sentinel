@@ -274,6 +274,13 @@ func cleanPath(p string) string {
 }
 
 func isCriticalSurface(p string) bool {
+	// Orchestration owns durable control-flow, human/physical authority and
+	// recovery semantics. engloop owns the policy deciding whether those
+	// changes receive mutation/security gates. Both boundaries must therefore
+	// fail safe before the feature-specific critical-surface list is evaluated.
+	if hasAnyPrefix(p, "internal/orchestration/", "internal/engloop/") {
+		return true
+	}
 	return hasAnyPrefix(p,
 		"internal/security/",
 		"internal/auth/",
