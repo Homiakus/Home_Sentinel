@@ -27,8 +27,8 @@ func (a *App) startIncidentRuntime() error {
 		// incident workflow, so the narrower callback ingress remains absent.
 		return nil
 	}
-	if a.Telegram.Client == nil || a.DB == nil || a.Users == nil || a.Audit == nil {
-		return errors.New("incident runtime: production dependencies unavailable")
+	if err := a.validateIncidentRuntimeDependencies(); err != nil {
+		return err
 	}
 
 	notifier := &tgsvc.DurableNotifier{
@@ -57,12 +57,32 @@ func (a *App) startIncidentRuntime() error {
 	return nil
 }
 
+func (a *App) validateIncidentRuntimeDependencies() error {
+	if a.Telegram.Client == nil {
+		return errors.New("incident runtime: Telegram client unavailable")
+	}
+	if a.DB == nil {
+		return errors.New("incident runtime: database unavailable")
+	}
+	if a.Users == nil {
+		return errors.New("incident runtime: user store unavailable")
+	}
+	if a.Audit == nil {
+		return errors.New("incident runtime: audit store unavailable")
+	}
+	if a.runCtx == nil {
+		return errors.New("incident runtime: lifecycle context unavailable")
+	}
+	if a.Health == nil {
+		return errors.New("incident runtime: health registry unavailable")
+	}
+	return nil
+}
+
 func (a *App) serveIncidentRuntime(runtime *orincident.Service, done chan<- error) {
 	err := runtime.Serve(a.runCtx)
-	if a.runCtx != nil && a.runCtx.Err() == nil {
-		if err == nil {
-			err = errors.New("incident runtime: serve loop stopped unexpectedly")
-		}
+	err, unexpected := classifyIncidentServeExit(a.runCtx.Err(), err)
+	if unexpected {
 		a.Health.Set("incident_runtime", health.Degraded, "INCIDENT_RUNTIME_STOPPED", "durable incident runtime stopped unexpectedly")
 		if a.Log != nil {
 			a.Log.Error("durable incident runtime stopped", "error", err)
@@ -72,21 +92,29 @@ func (a *App) serveIncidentRuntime(runtime *orincident.Service, done chan<- erro
 	close(done)
 }
 
+func classifyIncidentServeExit(lifecycleErr, serveErr error) (error, bool) {
+	if lifecycleErr != nil {
+		return serveErr, false
+	}
+	if serveErr == nil {
+		serveErr = errors.New("incident runtime: serve loop stopped unexpectedly")
+	}
+	return serveErr, true
+}
+
 func (a *App) stopIncidentRuntime() error {
-	if a == nil || a.IncidentRuntime == nil {
+	if a == nil {
 		return nil
 	}
-	if a.incidentServeDone != nil {
-		timer := time.NewTimer(incidentRuntimeShutdownTimeout)
-		defer timer.Stop()
-		select {
-		case err := <-a.incidentServeDone:
-			if err != nil && !errors.Is(err, context.Canceled) && a.runCtx != nil && a.runCtx.Err() == nil {
-				return fmt.Errorf("incident runtime: serve stopped: %w", err)
-			}
-		case <-timer.C:
-			return errors.New("incident runtime: serve did not stop after cancellation")
-		}
+	if a.IncidentRuntime == nil {
+		return nil
+	}
+	var lifecycleErr error
+	if a.runCtx != nil {
+		lifecycleErr = a.runCtx.Err()
+	}
+	if err := waitIncidentServe(a.incidentServeDone, lifecycleErr, incidentRuntimeShutdownTimeout); err != nil {
+		return err
 	}
 	if err := a.IncidentRuntime.Close(); err != nil {
 		return fmt.Errorf("incident runtime: close: %w", err)
@@ -95,4 +123,27 @@ func (a *App) stopIncidentRuntime() error {
 	a.IncidentCallbacks = nil
 	a.incidentServeDone = nil
 	return nil
+}
+
+func waitIncidentServe(done <-chan error, lifecycleErr error, timeout time.Duration) error {
+	if done == nil {
+		return errors.New("incident runtime: serve completion channel missing")
+	}
+	if timeout <= 0 {
+		return errors.New("incident runtime: shutdown timeout must be positive")
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case err := <-done:
+		if lifecycleErr != nil {
+			return nil
+		}
+		if err == nil {
+			return errors.New("incident runtime: serve loop stopped unexpectedly")
+		}
+		return fmt.Errorf("incident runtime: serve stopped: %w", err)
+	case <-timer.C:
+		return errors.New("incident runtime: serve did not stop after cancellation")
+	}
 }
