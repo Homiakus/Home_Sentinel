@@ -1,78 +1,47 @@
 # Implementation status
 
-## Status semantics
+`MASTER_PLAN.md` is the execution source of truth. This file is an observed snapshot.
 
-Observed snapshot only. `MASTER_PLAN.md` owns execution ordering/status; detailed intent remains in `docs/AXIOM_IMPLEMENTATION_PLAN.md` and `docs/SCENARIO_SYSTEM_PLAN.md`. Completion requires executable evidence.
+## Verified foundation
 
-## Verified baseline
+T-001/T-002/T-003/T-011/T-012/T-018 are verified. On `26b28f...`, runtime remote plaintext is loopback-only and config security changes are mutation-critical with a real killed mutant.
 
-- Core Go control plane, Axiom/ADGO durable workflows, auth/authz, SQLite migrations/state, gateways/recovery and Scenario headless model/compiler/safety/catalog/simulator are present.
-- Standard CI covers module hygiene, format, vet, unit, race, engineering reconciliation and benchmark smoke.
-- Security qualification includes supply-chain check, CycloneDX SBOM and Trivy repository qualification.
-- T-011 removed the siren scheduler-timing flake.
-- Stage 17 evidence is reconciled in [`STAGE17_RECONCILIATION.md`](STAGE17_RECONCILIATION.md).
+## T-019 current state
 
-## T-012/T-018 — verified runtime exposure + test-of-tests recovery
+Commit `6b55fe38b7948a18f14c3eb89051887a482a97ee` changes the engineering-loop taxonomy so `internal/orchestration/` and `internal/engloop/` are CRITICAL. Architecture tests cover incident, siren, camera recovery and gate-policy paths.
 
-The current production HTTP runtime is plaintext, therefore production `Config.Validate()` now permits only loopback listen addresses. Wildcard, unspecified, LAN and arbitrary remote hostnames fail closed; malformed host:port is rejected separately; default `127.0.0.1:8080` remains valid.
+Evidence:
+- planner: PASS, `risk=CRITICAL`, `mutation_targets=["./internal/engloop"]`;
+- critical-diff Gremlins: executed;
+- standard CI/race: PASS;
+- security/SBOM/Trivy: PASS;
+- Gremlins result: `Killed=0`, `Lived=0`, `Not covered=0`, `MutantsTotal=0`, efficacy 0%.
 
-The first T-012 mutation attempt exposed an engineering-loop defect: config security changes were not mutation-targetable. T-018 repaired that boundary.
+The workflow currently reports this as success, but the project does not accept zero generated mutants as proof for a selected CRITICAL target. Therefore T-019 is VERIFYING/BLOCKED rather than DONE.
 
-Final evidence on `26b28f4505f7b4cd4059c14d310b326b97cdef50`:
+## F-014 / T-020
 
-- `ci`: PASS including race, reconciliation and benchmark smoke;
-- `security`: PASS including SBOM and Trivy;
-- `mutation`: PASS;
-- planner: `risk=CRITICAL`, `mutation_targets=["./internal/config"]`;
-- Gremlins: killed 1, lived 0, not covered 0, efficacy 100%, mutator coverage 100%.
+`internal/engloop/mutation.go` records `MutantsTotal`, but `cmd/sentinel-engloop runMutation` only fails on `CriticalBlockers`; zero evidence exits success. T-020 will make zero-mutant critical campaigns fail closed and rerun a range beginning before T-019 so the taxonomy and the new evidence guard are qualified together.
 
-Therefore F-006/F-012 and T-012/T-018 are resolved/verified.
+## T-004 characterization after T-019/T-020
 
-## F-013 — next engineering-loop blocker
+Existing foundations:
+- SQLite `schema_migrations` already exists;
+- events have `SchemaVersion`;
+- ADGO executions persist PlanID/PlanVersion/PlanDigest;
+- pinned Axiom rejects plan digest mismatch;
+- Axiom Pebble implements `ExecutionCatalog`;
+- Axiom `Host` supports multiple registered immutable plans over one store and routes existing execution work by persisted digest;
+- Axiom already supplies conservative explicit migration APIs.
 
-Read-only T-004 characterization found that safety-critical `internal/orchestration/` and the gate-policy engine `internal/engloop/` are outside `isCriticalSurface`. A change to incident/door/siren/recovery plan routing could therefore be classified only MEDIUM and skip mutation entirely; the code deciding whether mutation runs is also not self-protected.
+Actual Home Sentinel gap: orchestration services still open one current plan. Historical plans and plan-specific signal binding metadata are not retained. Real incident v1 from commit `caa446b...` waits on node `await-owner-response`, while v2 uses `await-owner-ack`; sending only the current target node would not resume v1 safely.
 
-T-019 is now the next P0 prerequisite: make both boundaries CRITICAL and prove the taxonomy change self-triggers mutation.
+Next after T-020/T-019 closure: integrate Axiom Host for incident v1/v2 with exact persisted-digest routing and version-specific owner-response binding, then prove durable reopen/upgrade.
 
-## T-004 durable plan characterization
+## Stage 17 residuals
 
-Existing foundations are stronger than the old roadmap implied:
+T-013 callback HTTP READY; T-014 principal kinds TODO; T-015 authz audit/limiting BLOCKED; T-016 command preconditions TODO; T-017 authenticator boundary BLOCKED.
 
-- SQLite already tracks `schema_migrations`;
-- event envelopes already persist and validate `SchemaVersion`;
-- Home Sentinel ADGO plans already have IDs/versions;
-- ADGO executions persist `PlanID`, `PlanVersion`, `PlanDigest`;
-- pinned Axiom rejects plan-digest mismatch;
-- pinned Axiom already provides conservative `ValidatePlanMigration` / `MigrateExecution`.
+## Other P0 work
 
-The actual Home Sentinel gap is runtime plan availability/routing: each orchestration service currently opens one current plan. Old non-terminal executions need an immutable historical plan catalog and dispatch by persisted digest; explicit migration should reuse Axiom rather than silently replace the plan.
-
-Important edge case: Siren plan version depends on `MaxActivationDuration`, so changing the safety timeout creates a new plan/digest. An old waiting siren execution must still be resolvable after restart.
-
-T-004 remains BLOCKED until T-019 gives this work real mutation test-of-tests.
-
-## Stage 17 remaining work
-
-- T-013: narrow authenticated callback HTTP bearer adapter — now READY after T-012.
-- T-014: explicit human/service/system principal kinds and authority rules.
-- T-015: generic authorization audit + principal-aware abuse limiting.
-- T-016: common stale-command expected-version/ETag + request idempotency contract.
-- T-017: pluggable authenticator boundary after principal semantics.
-
-## Other P0 production work
-
-- T-005 crash/restore external-effect linearization.
-- T-006 explicit process topology/distributed fencing policy.
-- T-009 release provenance/reproducibility/rollback qualification.
-- T-010 technical verified-main guard.
-
-## Dependency-aware order
-
-1. T-019 orchestration/gate-policy mutation boundary.
-2. T-004 immutable pinned-plan catalog/routing.
-3. T-013/T-014/T-016 Stage 17 P0 residuals in dependency-safe order.
-4. T-005/T-006 crash/restore and topology/fencing.
-5. T-007 authenticated Scenario API.
-6. T-008/T-009/T-010 operational/release/main-guard qualification.
-
-Execution truth: `../MASTER_PLAN.md`
+T-004 durable plan evolution, T-005 crash/restore linearization, T-006 topology/fencing, T-009 release qualification. T-010 verified-main guard remains planned.

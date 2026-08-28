@@ -1,0 +1,39 @@
+{
+  "plan_item": "T-020",
+  "intent": "Fail closed when a critical-diff mutation campaign was invoked for selected critical production targets but Gremlins generated zero mutants, then requalify T-019 and this guard together.",
+  "status_before": "OPEN",
+  "risk_class": "CRITICAL",
+  "invariants": [
+    "A selected CRITICAL mutation target requires non-empty generated mutation evidence.",
+    "MutantsTotal equal to zero cannot be accepted as a clean critical mutation result.",
+    "Killed nonzero critical mutation evidence remains acceptable when no critical blockers survive.",
+    "The recovery range includes T-019 taxonomy and T-020 evidence enforcement."
+  ],
+  "contracts": [
+    "MutationReport exposes whether any mutation evidence exists.",
+    "sentinel-engloop mutation returns a dedicated nonzero exit for zero-mutant reports.",
+    "critical lived/not-covered/timed-out mutants continue to fail independently.",
+    "a nonzero killed report succeeds."
+  ],
+  "code_surfaces": [
+    "internal/engloop/mutation.go",
+    "internal/engloop/mutation_test.go",
+    "cmd/sentinel-engloop/main.go",
+    "cmd/sentinel-engloop/main_test.go"
+  ],
+  "required_gates": [
+    "static",
+    "unit",
+    "race",
+    "mutation-critical",
+    "security"
+  ],
+  "acceptance_evidence": [
+    "unit tests distinguish zero evidence from blocker-free nonzero evidence",
+    "CLI test proves zero report returns dedicated failure",
+    "planner selects ./internal/engloop for implementation range",
+    "Gremlins final report has mutants_total greater than zero",
+    "no critical lived/not-covered/timed-out mutants remain",
+    "ci/security/mutation pass on recovery commit"
+  ]
+}

@@ -2,28 +2,26 @@
 
 > Single execution source of truth for progressive audit, atomic implementation and verified direct-to-main delivery. Detailed architecture/product plans remain intent specifications; this file owns findings, invariants, ordering and execution state.
 
-**Plan revision:** 2026-08-28 / T-012 and T-018 verified on `26b28f4505f7b4cd4059c14d310b326b97cdef50`; F-013/T-019 inserted before T-004.
+**Plan revision:** 2026-08-28 / T-019 code on `6b55fe38b7948a18f14c3eb89051887a482a97ee` passes ci/security and self-triggers mutation planning, but F-014 zero-mutant false-success blocks closure; T-020 is next.
 
 ---
 
 # 1. Mission
 
-Deliver a production-grade local security/automation platform through small reviewable changes while preserving fail-closed authority, durable external-effect semantics, reproducibility, rollback and evidence-driven evolution.
+Deliver a production-grade local security/automation platform via small reviewable changes while preserving fail-closed authority, durable external-effect semantics, reproducibility, rollback and evidence-driven evolution.
 
 `AUDIT -> PLAN -> SELECT -> CHARACTERIZE -> IMPLEMENT -> TEST -> SELF-REVIEW -> RECONCILE -> COMMIT -> PUSH main -> VERIFY -> COMPRESS -> NEXT`
 
-Material discoveries enter Findings and the dependency graph before implementation scope expands.
+Unexpected material discoveries are recorded before implementation scope expands.
 
 # 2. Current State
 
-- Go control plane with typed domain/events, Axiom lifecycle, ADGO durable workflows, auth/authz, SQLite application state, gateways/recovery and Scenario model/compiler/safety/catalog/simulator.
-- ML/VLM/LLM are evidence producers, never authority holders.
+- Go control plane: typed domain/events, Axiom lifecycle, ADGO durable workflows, auth/authz, SQLite state, gateways/recovery and Scenario compiler/safety/catalog/simulator.
 - Verified tasks: T-001, T-002, T-003, T-011, T-012, T-018.
-- T-012 makes the current plaintext runtime loopback-only. T-018 repaired test-of-tests so `internal/config/` is CRITICAL and mutation-targetable.
-- On `26b28f...`: `ci`, `security`, `mutation` all PASS; Gremlins planned `./internal/config`, killed 1/1 relevant mutant, lived 0, not-covered 0, efficacy/coverage 100%.
-- T-004 characterization shows event/schema and ADGO execution plan identity already exist; the missing Home Sentinel guarantee is immutable historical plan availability/routing across restart and upgrade.
-- New F-013 blocks T-004 implementation: `internal/orchestration/` and the gate-policy engine `internal/engloop/` are not currently mutation-critical.
-- Local full module execution remains unavailable in this agent environment because network dependency resolution is blocked; GitHub Actions is authoritative for complete build/race/security/mutation evidence.
+- T-019 makes `internal/orchestration/` and `internal/engloop/` mutation-critical and its own commit correctly produces `risk=CRITICAL`, `mutation_targets=["./internal/engloop"]`.
+- T-019 standard CI/race/security PASS, but Gremlins generated zero mutants; current mutation validator treats that as success. F-014/T-020 blocks T-019 closure.
+- T-004 characterization: Home Sentinel already has schema/plan identities; pinned Axiom already has `ExecutionCatalog`, multi-plan `Host`, digest routing and conservative migration APIs. The Home Sentinel gap is integration/retention of historical immutable plans and version-specific signal bindings.
+- Local full module execution is unavailable in this agent environment due network dependency resolution; GitHub Actions is authoritative.
 
 # 3. Architecture Map
 
@@ -40,9 +38,10 @@ Media / sensors -> typed evidence/events
                               |
                        external/physical IO
 
-SQLite       : application/auth/audit/config state + schema_migrations
-ADGO/Pebble  : execution PlanID/PlanVersion/PlanDigest + durable history/state
-Scenario     : AST -> validation -> Safety Compiler -> lowering -> catalog/simulator
+SQLite      : app/auth/audit + schema_migrations
+ADGO/Pebble : Execution PlanID/PlanVersion/PlanDigest + durable history
+Axiom Host  : multi-plan engine registry/routing by persisted digest
+Scenario    : AST -> validation -> Safety Compiler -> lowering -> catalog/simulator
 ```
 
 Primary boundaries: `internal/domain`, `internal/orchestration`, `internal/gateway`, `internal/auth`, `internal/authz`, `internal/config`, `internal/database`, `internal/httpserver`, `internal/scenario`, `internal/integrations`, `internal/engloop`.
@@ -57,101 +56,95 @@ Primary boundaries: `internal/domain`, `internal/orchestration`, `internal/gatew
 | unit/integration | PASS |
 | race | PASS; no active unexplained flake |
 | security qualification | PASS |
-| critical-diff mutation | PASS; config boundary proven executable |
+| config critical mutation | PASS with nonzero killed mutant |
+| orchestration/engloop mutation planning | routes correctly, but zero-mutant acceptance gap F-014 |
 | benchmark smoke | PASS |
-| global coverage | not yet a release metric |
 | target-hardware performance | OPEN T-008 |
-
-Verified reference SHA: `26b28f4505f7b4cd4059c14d310b326b97cdef50`.
 
 # 5. System Invariants
 
 - **I-001** ML/VLM/LLM never possess human/physical authority.
 - **I-002** External writes cross desired-state/idempotency/reconciliation gateways.
 - **I-003** Ambiguous provider outcomes are never blindly replayed.
-- **I-004** Human authority cannot be obtained from unsigned, unbound or machine/system input.
+- **I-004** Human authority cannot come from unsigned/unbound/machine input.
 - **I-005** Physical ownership requires durable cross-execution control; process-local locks are not multi-process fencing.
 - **I-006** Published Scenario semantics are version-pinned and Safety Compiler is mandatory.
-- **I-007** Secrets are referenced; plaintext does not enter durable state/log/audit responses.
+- **I-007** Secrets are references; plaintext does not enter durable state/log/audit responses.
 - **I-008** Non-terminal durable work survives compatible upgrade or fails/migrates explicitly.
-- **I-009** Runtime DB/WAL/SHM/artifact/operator state is outside source control.
-- **I-010** Every pushed `main` state is buildable and materially no worse than its parent.
+- **I-009** Runtime DB/WAL/SHM/artifacts/operator state stay outside source control.
+- **I-010** Every pushed main state is buildable and materially no worse than its parent.
 - **I-011** Critical safety tests use observable synchronization, not scheduler luck.
-- **I-012** Until TLS is actually served by production runtime, HTTP binds are loopback-only.
-- **I-013** Human/service/system principals must be technically distinguishable before machine transports receive auth context.
+- **I-012** Until TLS is actually served, production HTTP binds are loopback-only.
+- **I-013** Human/service/system principals must be technically distinguishable.
 - **I-014** HTTP request idempotency/staleness and workflow semantic idempotency are separate contracts.
-- **I-015** Security-bearing configuration validators are mutation-critical and must create executable mutation work.
-- **I-016** Safety/control orchestration and the engineering gate-policy engine are mutation-critical; code deciding whether mutation runs cannot itself escape test-of-tests.
-- **I-017** Existing ADGO executions run only against their pinned PlanID/PlanDigest; a new active plan never silently reinterprets old durable state.
+- **I-015** Security-bearing configuration validators are mutation-critical and create executable mutation work.
+- **I-016** Safety/control orchestration and engineering gate-policy code are mutation-critical.
+- **I-017** Existing ADGO executions run only against their pinned PlanID/PlanDigest; active plan changes never silently reinterpret durable state.
+- **I-018** A CRITICAL mutation campaign with selected production targets is not valid evidence when Gremlins generates zero viable/testable mutants.
 
 # 6. Findings Registry
 
-## F-001 — Living execution plan was fragmented
-**Status:** Resolved | **Severity:** High | **Confidence:** Confirmed  
-Resolved by T-001.
+## F-001 — Fragmented execution plan
+**Status:** Resolved | **Severity:** High | T-001.
 
-## F-002 — Runtime SQLite/WAL state was tracked
-**Status:** Resolved | **Severity:** High | **Confidence:** Confirmed  
-Resolved by T-002.
+## F-002 — Runtime SQLite/WAL tracked in Git
+**Status:** Resolved | **Severity:** High | T-002.
 
-## F-003 — Stage 17 recorded status was stale
-**Status:** Resolved | **Severity:** Medium | **Confidence:** Confirmed  
-Resolved by T-003 and `docs/STAGE17_RECONCILIATION.md`.
+## F-003 — Stage 17 recorded status stale
+**Status:** Resolved | **Severity:** Medium | T-003.
 
 ## F-004 — `main` lacks required-check technical protection
-**Status:** Planned | **Severity:** High | **Confidence:** Confirmed  
-GitHub reports `protected=false`; T-010.
+**Status:** Planned | **Severity:** High | **Confidence:** Confirmed | T-010.
 
-## F-005 — Siren compensation race test depended on scheduler timing
-**Status:** Resolved | **Severity:** High | **Confidence:** Confirmed  
-Resolved by T-011.
+## F-005 — Siren compensation race test used scheduler timing
+**Status:** Resolved | **Severity:** High | T-011.
 
-## F-006 — Hardened remote-TLS rule was disconnected from runtime
-**Status:** Resolved | **Severity:** High | **Confidence:** Confirmed  
-T-012 rejects all non-loopback plaintext runtime binds; T-018 supplied real mutation evidence. Verified on `26b28f...`.
+## F-006 — Hardened remote-TLS rule disconnected from runtime
+**Status:** Resolved | **Severity:** High | T-012 + T-018; verified `26b28f...`.
 
 ## F-007 — Callback semantics not wired to external HTTP transport
-**Status:** Planned | **Severity:** High | **Confidence:** Strong  
-T-013.
+**Status:** Planned | **Severity:** High | T-013.
 
 ## F-008 — No explicit human/service/system principal kinds
-**Status:** Planned | **Severity:** High | **Confidence:** Confirmed  
-T-014.
+**Status:** Planned | **Severity:** High | T-014.
 
-## F-009 — Authorization audit/rate limits are path-specific
-**Status:** Planned | **Severity:** Medium/High | **Confidence:** Confirmed  
-T-015.
+## F-009 — Authorization audit/rate limits path-specific
+**Status:** Planned | **Severity:** Medium/High | T-015.
 
-## F-010 — Authentication boundary is not pluggable
-**Status:** Planned | **Severity:** Medium | **Confidence:** Confirmed  
-T-017.
+## F-010 — Authentication boundary not pluggable
+**Status:** Planned | **Severity:** Medium | T-017.
 
 ## F-011 — Common HTTP stale/idempotency contract absent
-**Status:** Planned | **Severity:** High | **Confidence:** Confirmed  
-T-016.
+**Status:** Planned | **Severity:** High | T-016.
 
 ## F-012 — Security configuration was not mutation-targetable
-**Status:** Resolved | **Severity:** High | **Confidence:** Confirmed  
-T-018 made `internal/config/` CRITICAL, repaired Work Packet enums and proved `mutation_targets=["./internal/config"]`. Recovery Gremlins: killed 1, lived 0, not covered 0, efficacy 100%.
+**Status:** Resolved | **Severity:** High | T-018. Planner selected `./internal/config`; Gremlins killed 1, lived 0, not-covered 0.
 
-## F-013 — Safety orchestration and gate-policy code are not mutation-critical
+## F-013 — Safety orchestration and gate-policy code were not mutation-critical
+**Status:** VERIFYING / blocked by F-014 | **Severity:** High | **Confidence:** Confirmed
+
+T-019 code now classifies `internal/orchestration/` and `internal/engloop/` CRITICAL; planner on `6b55fe38...` selected `./internal/engloop` and entered Critical diff mutation testing. Standard ci/security PASS. Closure waits for non-empty mutation evidence after T-020.
+
+## F-014 — Critical mutation campaign accepts zero generated mutants
 **Status:** Planned | **Severity:** High | **Confidence:** Confirmed
 
-**Category:** Testing / Safety / Engineering loop.  
-**Evidence:** `isCriticalSurface` currently covers security/auth/config/gateway/scenario safety/etc. but not `internal/orchestration/` or `internal/engloop/`; `ClassifyPaths` therefore falls through to generic MEDIUM for e.g. `internal/orchestration/incident/service.go`, and `MutationTargets` returns no orchestration target.  
-**Affected code:** incident lifecycle, Door/Siren physical workflows, camera recovery, resourceguard, lifecycle adapters, and the gate-classification code itself.  
-**Root cause:** critical-surface taxonomy grew by feature rather than authority/durability boundary.  
-**Impact:** T-004 plan routing/migration or physical workflow changes could pass without Gremlins; mutations to the code deciding whether mutation runs could also escape mutation testing.  
-**Blast radius:** all future orchestration safety/versioning work.  
-**Invariants:** I-002, I-003, I-005, I-008, I-010, I-016, I-017.  
-**Task:** T-019; blocks T-004 implementation.
+**Category:** Testing / Reliability / Test-of-tests.  
+**Evidence:** T-019 planner selected `risk=CRITICAL`, `mutation_targets=["./internal/engloop"]`, Gremlins ran and reported `Killed:0, Lived:0, Not covered:0`, `MutantsTotal=0`, efficacy/coverage 0%; `sentinel-engloop mutation` still returned success because it only fails when `CriticalBlockers` is non-empty.  
+**Files:** `internal/engloop/mutation.go`, `cmd/sentinel-engloop/main.go`, associated tests, `.github/workflows/mutation.yml`.  
+**Root cause:** mutation evidence model distinguishes bad mutants but not absence of evidence.  
+**Impact:** any CRITICAL diff composed of syntactically non-mutatable changes can be declared mutation-clean without testing any mutant.  
+**Blast radius:** all CRITICAL work packets and future safety/security changes.  
+**Invariants:** I-010, I-015, I-016, I-018.  
+**Affected tasks:** T-019 blocked; T-004 remains blocked.  
+**Task:** T-020.
 
 # 7. Risk Register
 
 | Risk | Severity | Control |
 |---|---|---|
-| orchestration/gate policy escapes mutation | High | T-019 READY |
-| in-flight workflow incompatible after upgrade | Critical | T-004 BLOCKED by T-019 |
+| zero-mutant false-success | High | T-020 READY |
+| orchestration taxonomy not yet fully evidenced | High | T-019 VERIFYING |
+| in-flight workflow incompatible after upgrade | Critical | T-004 BLOCKED |
 | callback transport absent | High | T-013 |
 | machine/human principal ambiguity | High | T-014 |
 | stale/duplicate HTTP command | High | T-016 |
@@ -159,217 +152,173 @@ T-018 made `internal/config/` CRITICAL, repaired Work Packet enums and proved `m
 | multi-process physical write race | Critical | T-006 |
 | direct main without required checks | High | T-010 |
 | release provenance/rollback | High | T-009 |
-| target hardware budgets unknown | Medium/High | T-008 |
 
 # 8. Pareto Improvements
 
-1. T-019 protect orchestration + engloop with real mutation gating.
-2. T-004 immutable pinned-plan catalog/routing across upgrade.
-3. T-013/T-014 callback transport and principal authority.
+1. T-020 make zero-mutant critical campaigns fail closed; close T-019 with real evidence.
+2. T-004 integrate Axiom multi-plan Host + retained historical incident plans.
+3. T-013/T-014 callback transport/principal authority.
 4. T-005/T-006 crash/fencing guarantees.
-5. T-016 common command preconditions before Scenario API expansion.
-6. T-015/T-010 audit/abuse and verified-main controls.
+5. T-016 common command preconditions.
+6. T-015/T-010 audit/abuse/main protection.
 
 # 9. Dependency DAG
 
 ```text
-T-001 [DONE]
- +-- T-002 [DONE]
- |    +-- T-011 [DONE]
- |          +-- T-003 [DONE]
- |                +-- T-012 [DONE]
- |                |     +-- T-018 [DONE]
- |                |     +-- T-013 callback HTTP [READY]
- |                +-- T-019 orchestration mutation boundary [READY]
- |                |     +-- T-004 pinned-plan evolution [BLOCKED]
- |                |           +-- T-005 crash/restore
- |                |           +-- T-006 topology/fencing
- |                +-- T-014 principals
- |                |     +-- T-015 authz audit/limiting
- |                |     +-- T-017 authenticator boundary
- |                +-- T-016 command preconditions
- +-- T-010 verified-main guard
+T-001 DONE -> T-002 DONE -> T-011 DONE -> T-003 DONE
+                                      |-> T-012 DONE -> T-018 DONE -> T-013 READY
+                                      |-> T-019 VERIFYING -> T-020 READY -> T-019 close -> T-004
+                                      |                                      |-> T-005
+                                      |                                      |-> T-006
+                                      |-> T-014 -> T-015 / T-017
+                                      |-> T-016
+T-001 -> T-010
 
-T-014 + T-016 + relevant T-013/T-004 contracts -> T-007 Scenario API
-T-004/T-005/T-006 + T-008 -> T-009 release qualification
+T-014 + T-016 + relevant T-013/T-004 -> T-007
+T-004/T-005/T-006 + T-008 -> T-009
 ```
 
 # 10. Implementation Phases
 
-- **A Repository/security truth:** T-001/T-002/T-003/T-011/T-012/T-018/T-019/T-010.
+- **A Truth/gates:** T-001/T-002/T-003/T-011/T-012/T-018/T-019/T-020/T-010.
 - **B Durable evolution + identity/transport:** T-004..T-006 and T-013..T-017.
-- **C Product surface:** T-007 and dependency-safe Scenario authoring.
-- **D Operational qualification:** T-008/T-009 plus adapters/observability/soak/release gates.
+- **C Product surface:** T-007.
+- **D Qualification:** T-008/T-009.
 
 # 11. Atomic Tasks
 
-## T-001 — Establish living master plan
-**Status:** DONE | **Priority:** P0. Verified `905862f...`.
-
-## T-002 — Remove tracked runtime SQLite state
-**Status:** DONE | **Priority:** P0. Verified `745f194...`.
-
-## T-003 — Reconcile Stage 17 executable evidence
-**Status:** DONE | **Priority:** P0. Verified `ef8ecaf...`.
+## T-001/T-002/T-003/T-011/T-012/T-018
+**Status:** DONE. Verified commits recorded in Iteration Log.
 
 ## T-004 — Pin durable workflow plans across upgrade
-**Status:** BLOCKED on T-019 | **Priority:** P0 | **Type:** HARDEN | **Leverage:** HIGH
+**Status:** BLOCKED on T-019/T-020 | **Priority:** P0
 
-**Characterization:** Home Sentinel already has SQLite `schema_migrations`, event `SchemaVersion`, ADGO plan IDs/versions, and ADGO executions persist `PlanID/PlanVersion/PlanDigest`. Pinned Axiom rejects plan-digest mismatch and already provides conservative `ValidatePlanMigration/MigrateExecution`.  
-**Actual gap:** each Home Sentinel service opens only the current plan via `adgo.OpenProduction`; historical immutable plans are not retained/routed.  
-**Goal:** new executions start on active plan; existing executions resolve exactly their persisted digest; unknown retired digest fails closed; migration remains explicit and uses Axiom migration APIs.  
-**Critical edge:** Siren plan version includes configured max-activation duration, so a safe timeout config change creates a new plan/digest and must not strand an older waiting execution.  
-**Tests:** old waiting execution reopen under changed active plan, unknown digest rejection, active/new start, explicit migration, parameterized siren plan retention, durable backend reopen, race + mutation.  
-**Non-goal:** do not reimplement Axiom migration mathematics.
+Characterization proves existing schema/plan identity and Axiom primitives. Pinned Axiom already supplies `ExecutionCatalog`, Pebble catalog support, multi-plan `Host`, routing by `Execution.PlanDigest`, and conservative `ValidatePlanMigration/MigrateExecution`.
 
-## T-005 — Prove crash/restore external-effect linearization
-**Status:** TODO | **Priority:** P0. Depends T-004.
+**Actual Home Sentinel gap:** services open one current plan only; historical plans and version-specific external signal bindings are not retained/routed. Real incident v1 (`caa446b...`) waits on `await-owner-response`; v2 uses `await-owner-ack`, so blindly targeting the current node cannot resume historical executions.
 
-## T-006 — Enforce supported process topology/fencing
-**Status:** TODO | **Priority:** P0. Depends T-004.
+**Direction:** integrate Axiom Host, retain immutable v1/v2 descriptors with signal-binding metadata, start new executions on active v2, dispatch old executions by digest, unknown digest fail closed, migration explicit only. Do not recreate Axiom host/migration logic.
 
-## T-007 — Expose authenticated Scenario API without bypasses
-**Status:** BLOCKED | **Priority:** P1. Depends relevant T-004/T-013/T-014/T-016 contracts.
+## T-005 — Crash/restore external-effect linearization
+**Status:** TODO | **Priority:** P0 | Depends T-004.
 
-## T-008 — Establish target-hardware performance budgets
+## T-006 — Supported topology/fencing
+**Status:** TODO | **Priority:** P0 | Depends T-004.
+
+## T-007 — Authenticated Scenario API
+**Status:** BLOCKED | **Priority:** P1.
+
+## T-008 — Target-hardware performance budgets
 **Status:** TODO | **Priority:** P1.
 
-## T-009 — Qualify release, upgrade and rollback
-**Status:** BLOCKED | **Priority:** P0. Depends T-004/T-005/T-006/T-008 and remaining release prerequisites.
+## T-009 — Release/upgrade/rollback qualification
+**Status:** BLOCKED | **Priority:** P0.
 
-## T-010 — Add technical verified-main guard
+## T-010 — Technical verified-main guard
 **Status:** TODO | **Priority:** P1.
 
-## T-011 — Make siren compensation verification deterministic under race
-**Status:** DONE | **Priority:** P0. Verified `5ccff8bf...` first attempt.
+## T-013 — Callback HTTP bearer adapter
+**Status:** READY | **Priority:** P0.
 
-## T-012 — Reject remote plaintext runtime bind until TLS is served
-**Status:** DONE | **Priority:** P0 | **Type:** HARDEN  
-Implementation `d57f239...`; final combined evidence `26b28f...`: ci/security/mutation PASS, config mutation target selected, Gremlins killed all relevant mutants.
+## T-014 — Explicit principal kinds/human-authority boundary
+**Status:** TODO | **Priority:** P0.
 
-## T-013 — Wire callback ingress through narrow HTTP bearer adapter
-**Status:** READY | **Priority:** P0 | **Type:** HARDEN. Depends T-012 (satisfied).
+## T-015 — Authorization audit/principal-aware limiting
+**Status:** BLOCKED | **Priority:** P1.
 
-## T-014 — Introduce explicit principal kinds/human-authority boundary
-**Status:** TODO | **Priority:** P0 | **Type:** HARDEN.
+## T-016 — HTTP command expected-version/idempotency contract
+**Status:** TODO | **Priority:** P0.
 
-## T-015 — Standardize authorization audit/principal-aware limiting
-**Status:** BLOCKED | **Priority:** P1. Depends T-014 + callback transport.
-
-## T-016 — Add common HTTP command precondition/idempotency contract
-**Status:** TODO | **Priority:** P0 | **Type:** HARDEN.
-
-## T-017 — Extract pluggable authenticator boundary
-**Status:** BLOCKED | **Priority:** P2. Depends T-014.
-
-## T-018 — Make security configuration mutation-critical
-**Status:** DONE | **Priority:** P0 | **Type:** HARDEN  
-Commit `26b28f4505f7b4cd4059c14d310b326b97cdef50`. Planner selected `./internal/config`; Gremlins killed 1, lived 0, not-covered 0; ci/security/mutation PASS.
+## T-017 — Pluggable authenticator boundary
+**Status:** BLOCKED | **Priority:** P2.
 
 ## T-019 — Make safety orchestration and gate policy mutation-critical
+**Status:** BLOCKED / VERIFYING | **Priority:** P0
+
+Implementation `6b55fe38...` succeeds in classification/planning and standard gates. Required mutation campaign ran but generated zero mutants; by I-018 that is not final evidence. T-020 blocks closure.
+
+## T-020 — Fail closed on zero-mutant critical mutation evidence
 **Status:** READY | **Priority:** P0 | **Type:** HARDEN | **Leverage:** HIGH
 
 ### Problem
-`internal/orchestration/` and `internal/engloop/` currently fall outside `isCriticalSurface`; T-004 could otherwise change plan routing without mandatory mutation execution.
+A selected CRITICAL mutation target can produce `MutantsTotal=0`; current CLI still exits success.
 
 ### Goal
-Classify both boundaries CRITICAL and produce concrete mutation targets for production Go changes.
+A mutation-diff run that was invoked because planner found critical mutation targets must contain at least one generated mutant; zero evidence is a hard gate failure.
 
 ### Scope
-`internal/engloop/model.go`, `model_test.go`, T-019 Work Packet, active packet, plan/status reconciliation.
-
-### Invariants
-I-010, I-016, I-017 plus physical/durable I-002/I-003/I-005/I-008.
+`internal/engloop/mutation.go`, mutation tests, `cmd/sentinel-engloop/main.go`, CLI tests, T-020 work packet and plan/status docs.
 
 ### Implementation
-- add `internal/orchestration/` and `internal/engloop/` to `isCriticalSurface`;
-- architecture tests pin CRITICAL classification and exact target directories;
-- verify a T-019 change to `internal/engloop/model.go` self-triggers mutation using the new taxonomy;
-- future orchestration changes must enter `Critical diff mutation testing`.
-
-### Tests / mutation
-Unit architecture tests + full CI/race/security. Mutation is mandatory; planner for implementation commit must include `./internal/engloop`, and Gremlins must report no lived/not-covered blockers for changed gate-policy semantics.
+- expose an explicit `HasMutationEvidence`/equivalent invariant based on `MutantsTotal > 0`;
+- `sentinel-engloop mutation` returns dedicated nonzero exit on zero mutants before accepting blocker-free status;
+- tests prove zero report fails and killed nonzero report succeeds;
+- recovery mutation range starts at `aaafae7...` so T-019 and T-020 are tested together.
 
 ### Acceptance
-No production orchestration or gate-policy Go change can remain below CRITICAL or silently skip mutation.
+Planner selects `./internal/engloop`; Gremlins runs; final report has `MutantsTotal>0`; all generated relevant mutants are killed/nonblocking; ci/race/security/mutation PASS. If Gremlins still generates zero, workflow must fail rather than pass.
 
 # 12. Testing Strategy
 
 G0 build/static/module; G1 unit/golden; G2 property/fuzz/model; G3 race; G4 contract/integration; G5 fault/crash; G6 mutation; G7 E2E/HIL/UX; G8 performance/soak/release.
 
-Critical edge space: `input x identity x authority x time x ordering x concurrency x persistence x external failure x resource ownership x capacity x topology x version x cancellation x recovery x test-gate-classification`.
+Critical edge space: `input x identity x authority x time x ordering x concurrency x persistence x external failure x ownership x topology x version x cancellation x recovery x gate-classification x evidence-emptiness`.
 
 # 13. Mutation Testing Strategy
 
-- Critical changed semantics require real Gremlins execution, not only a Work Packet label.
-- Security config, orchestration/control workflows, gate-policy engine, principal policy, command preconditions, schema/migration guards and physical gateways are mutation-critical.
-- Taxonomy architecture tests prevent critical paths from disappearing silently.
-- Surviving/not-covered mutants require observable-contract analysis; never weaken thresholds merely to obtain green.
+- Critical changed semantics require real Gremlins execution and non-empty generated evidence.
+- `MutantsTotal==0` is failure when the workflow was invoked for selected critical targets.
+- Config, orchestration, engloop, principal policy, command preconditions, migration guards and physical gateways are mutation-critical.
+- Surviving/not-covered mutants require contract analysis; never weaken gates merely to obtain green.
 
 # 14. Performance Baselines
 
-Current benchmark smoke is regression smoke, not an SLO/capacity claim. T-008 owns target-hardware latency, throughput and allocation budgets.
+Benchmark smoke is regression smoke only. T-008 owns target-hardware latency/throughput/allocation budgets.
 
 # 15. Security Hardening
 
-Source/runtime-state hygiene DONE; deterministic siren safety DONE; Stage17 truth DONE; remote plaintext guard DONE; config mutation boundary DONE. Next: orchestration mutation boundary -> pinned-plan evolution -> callback/principal/precondition work -> crash/fencing -> verified-main/release qualification.
+Source-state hygiene DONE; deterministic siren safety DONE; Stage17 truth DONE; remote plaintext guard DONE; config mutation boundary DONE. Next: zero-evidence mutation guard -> close orchestration taxonomy -> pinned-plan evolution -> callback/principal/preconditions -> crash/fencing -> main/release qualification.
 
 # 16. Migration Strategy
 
-`characterize old -> retain immutable old contract -> introduce active new contract -> route existing state by durable identity -> explicit migration only at safe/quiescent point -> verify restart/rollback -> retire legacy only when no durable references remain`.
-
-For ADGO, use persisted PlanID/PlanDigest and Axiom migration APIs; never silently substitute current plan for old execution state.
+`characterize old -> retain immutable old contract -> introduce active new contract -> route existing state by durable identity -> explicit migration only at safe/quiescent point -> verify restart/rollback -> retire old implementation only after no durable references remain`.
 
 # 17. Deferred Work
 
-- broad Scenario UI/UX until authority/API prerequisites;
-- full remote TLS listener/certificate lifecycle after current loopback invariant;
-- OIDC/mTLS implementations after T-017;
-- multi-node support if v1 deliberately enforces single writer;
-- low-leverage cosmetic refactors.
+Broad Scenario UI/UX; full TLS listener/cert lifecycle; OIDC/mTLS implementations; multi-node mode beyond explicit v1 topology; low-leverage refactors.
 
 # 18. Rejected Decisions
 
-- Roadmap checkbox as proof — rejected.
-- Green rerun as flake resolution — rejected.
-- Increase safety-test timeout — rejected.
-- Expose callback HTTP before remote plaintext is impossible — rejected.
-- Treat ADGO semantic idempotency as HTTP idempotency — rejected.
-- Model service/system as fake users — rejected.
-- Add unused TLS fields to claim remote security — rejected.
-- Treat requested mutation as proof when planner selects no critical production boundary — rejected.
-- Auto-migrate old ADGO executions to current plan on startup — rejected; migration must be explicit.
-- Reimplement Axiom plan-migration logic in Home Sentinel — rejected.
-- Force push — rejected.
+- roadmap checkbox as proof;
+- green rerun as flake resolution;
+- safety timeout inflation;
+- callback HTTP before remote plaintext is impossible;
+- ADGO semantic idempotency as HTTP idempotency;
+- service/system as fake users;
+- unused TLS fields as security;
+- mutation request without selected target as evidence;
+- selected target with zero generated mutants as evidence;
+- automatic plan substitution/migration on startup;
+- reimplementing Axiom Host/migration logic;
+- force push.
 
 # 19. Completed Tasks
 
-T-001, T-002, T-003, T-011, T-012, T-018.
+T-001, T-002, T-003, T-011, T-012, T-018. T-019 implemented but not final-DONE.
 
 # 20. Iteration Log
 
-- **1 / T-001:** `905862f...`, ci/security/mutation PASS.
-- **2 / T-002:** `745f194...`, F-005 discovered; final verification PASS.
-- **3 / F-005 planning:** `c30b395...`, gates PASS.
-- **4 / T-011:** `5ccff8bf...`, first-attempt race/security/mutation PASS.
-- **5 / T-003:** `ef8ecaf...`, Stage17 reconciliation, all gates PASS.
-- **6 / T-012:** `d57f239...`, product ci/security PASS; mutation setup failure exposed F-012.
-- **7 / T-018 recovery:** `26b28f4505f7b4cd4059c14d310b326b97cdef50`; ci/security/mutation PASS. Planner: CRITICAL + `./internal/config`; Gremlins killed 1/lived 0/not-covered 0, efficacy 100%. T-012/T-018 and F-006/F-012 resolved.
-- **8 / closure + F-013 planning:** pending commit; closes previous tasks and inserts T-019 before T-004.
+- **1 T-001** `905862f...`: ci/security/mutation PASS.
+- **2 T-002** `745f194...`: DB hygiene; F-005 discovered; final PASS.
+- **3 F-005 plan** `c30b395...`: PASS.
+- **4 T-011** `5ccff8bf...`: deterministic siren test; first-attempt PASS.
+- **5 T-003** `ef8ecaf...`: Stage17 reconciliation; PASS.
+- **6 T-012** `d57f239...`: ci/security PASS; mutation setup exposed F-012.
+- **7 T-018** `26b28f...`: config mutation boundary; Gremlins killed 1/1; all gates PASS; closes T-012/T-018.
+- **8 F-013 plan/closure** `aaafae7...`: planning gates PASS.
+- **9 T-019** `6b55fe38...`: ci/race/security PASS; planner CRITICAL + `./internal/engloop`; Gremlins ran but total mutants=0. Logical result BLOCKED by F-014 despite workflow conclusion success.
+- **10 F-014 planning:** pending commit; T-020 inserted before any T-004 code.
 
 # 21. Definition of Final Done
 
-- no unresolved Critical/High findings except explicit accepted deferral;
-- all P0/P1 acceptance criteria verified;
-- remote HTTP exposure is TLS-protected or technically impossible;
-- critical config/orchestration/gate-policy validators have real mutation execution;
-- human/service/system authority distinctions are explicit;
-- durable plan upgrade/restart/rollback is proven;
-- crash/fencing invariants exercised around external effects;
-- stale/idempotency HTTP contracts precede broad mutable APIs;
-- security/race/static/fault/mutation gates green;
-- target-hardware budgets met;
-- no unexplained flakes;
-- docs match observed code;
-- final re-audit finds no fundamental blocker;
-- last verified state is on `main`, no force push.
+No unresolved Critical/High findings without accepted deferral; all P0/P1 acceptance verified; remote exposure safe; critical test-of-tests has selected targets and non-empty clean mutation evidence; explicit principal kinds; durable plan upgrade/restart/rollback; crash/fencing tests; stale/idempotency HTTP contracts; security/race/static/fault/mutation green; hardware budgets met; no unexplained flakes; docs match code; final re-audit finds no fundamental blocker; last verified state is main with no force push.
