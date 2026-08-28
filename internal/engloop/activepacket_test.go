@@ -34,6 +34,19 @@ func TestLoadActiveWorkPacketValidatesReferencedPacket(t *testing.T) {
 	}
 }
 
+func TestActiveWorkPacketAcceptsInclusiveCommitBoundaries(t *testing.T) {
+	for _, max := range []int{1, 256} {
+		active := ActiveWorkPacket{
+			Packet:       "docs/engineering/work-packets/p.json",
+			MutationBase: strings.Repeat("a", 40),
+			MaxCommits:   max,
+		}
+		if err := active.Validate(); err != nil {
+			t.Fatalf("max_commits=%d rejected: %v", max, err)
+		}
+	}
+}
+
 func TestActiveWorkPacketRejectsTraversalAndMutableBase(t *testing.T) {
 	cases := []ActiveWorkPacket{
 		{Packet: "../packet.json", MutationBase: strings.Repeat("a", 40), MaxCommits: 10},
@@ -57,6 +70,18 @@ func TestLoadActiveWorkPacketRejectsReferencedPacketOutsideRoot(t *testing.T) {
 }`)
 	if _, _, err := LoadActiveWorkPacket(root); err == nil {
 		t.Fatal("path traversal packet accepted")
+	}
+}
+
+func TestLoadActiveWorkPacketRejectsMultipleJSONValues(t *testing.T) {
+	root := t.TempDir()
+	writeActiveFixture(t, root, ActiveWorkPacketPath, `{
+  "packet":"docs/engineering/work-packets/p.json",
+  "mutation_base":"38163bba63b7dee147bd1edfe579db86c11a53f7",
+  "max_commits":64
+} {"extra":true}`)
+	if _, _, err := LoadActiveWorkPacket(root); err == nil {
+		t.Fatal("multiple active-packet JSON values accepted")
 	}
 }
 
