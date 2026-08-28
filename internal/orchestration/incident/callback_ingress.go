@@ -35,6 +35,8 @@ type CallbackAuditStore interface {
 }
 
 type CallbackWorkflow interface {
+	OwnerResponseBindingNode(context.Context, string) (string, error)
+	OwnerDecisionBindingNode(context.Context, string) (string, error)
 	OwnerResponse(context.Context, string, string, any) (*adgo.Execution, error)
 	ResolveOwnerCallbackDecision(context.Context, string, string, domainincident.Decision, string, string, any) (*adgo.Execution, error)
 }
@@ -59,9 +61,17 @@ func (s *CallbackIngress) OwnerResponse(
 	payload any,
 	meta CallbackMeta,
 ) (*adgo.Execution, error) {
+	if s == nil || s.Workflow == nil {
+		return nil, ErrCallbackIngressUnavailable
+	}
+	executionID = strings.TrimSpace(executionID)
+	nodeID, err := s.Workflow.OwnerResponseBindingNode(ctx, executionID)
+	if err != nil {
+		return nil, err
+	}
 	expected := callback.Binding{
-		ExecutionID: strings.TrimSpace(executionID),
-		NodeID:      NodeAwaitAck,
+		ExecutionID: executionID,
+		NodeID:      strings.TrimSpace(nodeID),
 		EventID:     strings.TrimSpace(eventID),
 		Action:      OwnerResponseEvent,
 	}
@@ -84,9 +94,17 @@ func (s *CallbackIngress) ResolveOwnerDecision(
 	payload any,
 	meta CallbackMeta,
 ) (*adgo.Execution, error) {
+	if s == nil || s.Workflow == nil {
+		return nil, ErrCallbackIngressUnavailable
+	}
+	executionID = strings.TrimSpace(executionID)
+	nodeID, err := s.Workflow.OwnerDecisionBindingNode(ctx, executionID)
+	if err != nil {
+		return nil, err
+	}
 	expected := callback.Binding{
-		ExecutionID: strings.TrimSpace(executionID),
-		NodeID:      NodeHumanDecision,
+		ExecutionID: executionID,
+		NodeID:      strings.TrimSpace(nodeID),
 		EventID:     strings.TrimSpace(eventID),
 		Action:      OwnerDecisionEvent,
 	}

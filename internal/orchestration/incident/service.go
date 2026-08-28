@@ -3,7 +3,9 @@ package incident
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 
 	domainincident "github.com/Homiakus/Home_Sentinel/internal/domain/incident"
 	"github.com/Homiakus/axiom/adgo"
@@ -25,32 +27,61 @@ func DefaultConfig(root string) Config {
 
 type Service struct {
 	production *adgo.Production
-	plan       *adgo.Plan
+	host       *adgo.Host
+	bundles    *bundleCatalog
 	worker     adgo.WorkerSpec
 }
 
 func Open(config Config, deps Dependencies) (*Service, error) {
-	plan, err := CompilePlan()
+	bundles, err := newBundleCatalog(deps)
 	if err != nil {
-		return nil, fmt.Errorf("compile incident plan: %w", err)
+		return nil, err
 	}
-	production, err := adgo.OpenProduction(plan, NewRegistry(deps), config.Production)
+	production, err := adgo.OpenProduction(bundles.active.plan, bundles.active.registry, config.Production)
 	if err != nil {
 		return nil, fmt.Errorf("open incident production runtime: %w", err)
 	}
+	fail := func(err error) (*Service, error) {
+		_ = production.Close()
+		return nil, err
+	}
+	host, err := adgo.NewHost(production.Store)
+	if err != nil {
+		return fail(fmt.Errorf("open incident multi-plan host: %w", err))
+	}
+	engineOptions := []adgo.EngineOption{
+		adgo.WithEngineLeaseTTL(config.Production.LeaseTTL),
+		adgo.WithEnginePollInterval(config.Production.PollInterval),
+		adgo.WithCoordinatorInterval(config.Production.CoordinatorInterval),
+		adgo.WithMaxLeaseRecoveries(config.Production.MaxLeaseRecoveries),
+		adgo.WithAdaptiveRouter(production.Router),
+	}
+	for _, bundle := range bundles.ordered {
+		engine, registerErr := host.Register(bundle.plan, bundle.registry, engineOptions...)
+		if registerErr != nil {
+			return fail(fmt.Errorf("register incident execution bundle %s: %w", bundle.plan.Version, registerErr))
+		}
+		bundle.engine = engine
+	}
+
 	concurrency := config.WorkerConcurrency
 	if concurrency <= 0 {
 		concurrency = 4
 	}
-	workerID := config.WorkerID
+	workerID := strings.TrimSpace(config.WorkerID)
 	if workerID == "" {
 		workerID = "home-sentinel-local"
 	}
-	return &Service{
+	service := &Service{
 		production: production,
-		plan:       plan,
+		host:       host,
+		bundles:    bundles,
 		worker:     adgo.WorkerSpec{ID: workerID, Concurrency: concurrency},
-	}, nil
+	}
+	if err := service.validatePersistedExecutions(context.Background()); err != nil {
+		return fail(err)
+	}
+	return service, nil
 }
 
 func (s *Service) Close() error {
@@ -64,17 +95,64 @@ func (s *Service) Start(ctx context.Context, trigger domainincident.Trigger) (*a
 	if err := trigger.Validate(); err != nil {
 		return nil, err
 	}
+	if s == nil || s.production == nil || s.bundles == nil || s.bundles.active == nil || s.bundles.active.engine == nil {
+		return nil, errors.New("incident: service is not open")
+	}
 	id := domainincident.ExecutionID(trigger)
-	return s.production.Engine.StartOrLoad(ctx, id, map[string]any{"trigger": trigger}, adgo.BudgetLimit{})
+	current, err := s.production.Store.Load(ctx, id)
+	if err == nil {
+		if _, bundleErr := s.bundles.bundleForExecution(current); bundleErr != nil {
+			return nil, bundleErr
+		}
+		return current, nil
+	}
+	if !errors.Is(err, adgo.ErrExecutionNotFound) {
+		return nil, err
+	}
+	return s.bundles.active.engine.StartOrLoad(ctx, id, map[string]any{"trigger": trigger}, adgo.BudgetLimit{})
 }
 
-// Drive executes currently runnable work for one incident and returns when it
-// is terminal, awaiting a human decision, or durably waiting for an event.
+// Drive executes currently runnable work using the exact engine pinned by the
+// execution's persisted PlanDigest.
 func (s *Service) Drive(ctx context.Context, executionID string) (*adgo.Execution, error) {
-	return s.production.Engine.RunLocal(ctx, executionID, adgo.LocalRunOptions{Worker: s.worker})
+	bundle, _, err := s.executionBundle(ctx, executionID)
+	if err != nil {
+		return nil, err
+	}
+	return bundle.engine.RunLocal(ctx, executionID, adgo.LocalRunOptions{Worker: s.worker})
+}
+
+func (s *Service) OwnerResponseBindingNode(ctx context.Context, executionID string) (string, error) {
+	bundle, _, err := s.executionBundle(ctx, strings.TrimSpace(executionID))
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(bundle.bindings.ownerResponseNode) == "" {
+		return "", fmt.Errorf("%w: owner response for plan version %s", ErrBundleOperationUnsupported, bundle.plan.Version)
+	}
+	return bundle.bindings.ownerResponseNode, nil
+}
+
+func (s *Service) OwnerDecisionBindingNode(ctx context.Context, executionID string) (string, error) {
+	bundle, _, err := s.executionBundle(ctx, strings.TrimSpace(executionID))
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(bundle.bindings.ownerDecisionNode) == "" {
+		return "", fmt.Errorf("%w: owner decision for plan version %s", ErrBundleOperationUnsupported, bundle.plan.Version)
+	}
+	return bundle.bindings.ownerDecisionNode, nil
 }
 
 func (s *Service) OwnerResponse(ctx context.Context, executionID, eventID string, payload any) (*adgo.Execution, error) {
+	bundle, _, err := s.executionBundle(ctx, executionID)
+	if err != nil {
+		return nil, err
+	}
+	target := bundle.bindings.ownerResponseNode
+	if strings.TrimSpace(target) == "" {
+		return nil, fmt.Errorf("%w: owner response for plan version %s", ErrBundleOperationUnsupported, bundle.plan.Version)
+	}
 	var raw json.RawMessage
 	if payload != nil {
 		encoded, err := json.Marshal(payload)
@@ -83,8 +161,8 @@ func (s *Service) OwnerResponse(ctx context.Context, executionID, eventID string
 		}
 		raw = encoded
 	}
-	if err := s.production.Engine.Signal(ctx, executionID, adgo.Event{
-		ID: eventID, Type: OwnerResponseEvent, TargetNode: NodeAwaitAck, Payload: raw,
+	if err := bundle.engine.Signal(ctx, executionID, adgo.Event{
+		ID: eventID, Type: OwnerResponseEvent, TargetNode: target, Payload: raw,
 	}); err != nil {
 		return nil, err
 	}
@@ -103,7 +181,15 @@ func (s *Service) ResolveOwnerDecision(
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.production.Engine.ResolveHuman(ctx, executionID, NodeHumanDecision, adgo.HumanResolution{
+	bundle, _, err := s.executionBundle(ctx, executionID)
+	if err != nil {
+		return nil, err
+	}
+	target := bundle.bindings.ownerDecisionNode
+	if strings.TrimSpace(target) == "" {
+		return nil, fmt.Errorf("%w: owner decision for plan version %s", ErrBundleOperationUnsupported, bundle.plan.Version)
+	}
+	if _, err := bundle.engine.ResolveHuman(ctx, executionID, target, adgo.HumanResolution{
 		Decision: mapped,
 		Actor:    actor,
 		Reason:   reason,
@@ -134,12 +220,40 @@ func mapDecision(value domainincident.Decision) (adgo.HumanDecision, error) {
 }
 
 func (s *Service) Get(ctx context.Context, executionID string) (*adgo.Execution, error) {
-	return s.production.Engine.Get(ctx, executionID)
+	if s == nil || s.production == nil {
+		return nil, errors.New("incident: service is not open")
+	}
+	execution, err := s.production.Store.Load(ctx, executionID)
+	if err != nil {
+		return nil, err
+	}
+	if !terminalExecution(execution.Status) {
+		if _, err := s.bundles.bundleForExecution(execution); err != nil {
+			return nil, err
+		}
+	}
+	return execution, nil
 }
 
-// Serve runs the resilient coordinator, schedule runner and worker loop. It is
-// intended for the long-lived sentinel process; Drive remains useful for tests
-// and request-scoped embedded execution.
+// Serve runs a multi-plan resilient coordinator/worker plus the active-v2
+// schedule runner. The single-plan Production.Engine is intentionally not
+// served, preventing historical executions from being interpreted as v2.
 func (s *Service) Serve(ctx context.Context) error {
-	return s.production.Serve(ctx, s.worker)
+	if s == nil || s.host == nil || s.production == nil || s.production.ScheduleRunner == nil {
+		return errors.New("incident: service is not open")
+	}
+	if err := s.validatePersistedExecutions(ctx); err != nil {
+		return err
+	}
+	serveCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	errCh := make(chan error, 2)
+	go func() { errCh <- s.host.ServeResilient(serveCtx, s.worker) }()
+	go func() { errCh <- s.production.ScheduleRunner.Run(serveCtx) }()
+	err := <-errCh
+	cancel()
+	if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return err
 }

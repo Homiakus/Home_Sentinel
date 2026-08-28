@@ -69,6 +69,14 @@ func (s *Service) ResolveOwnerCallbackDecision(
 	if err != nil {
 		return nil, err
 	}
+	bundle, _, err := s.executionBundle(ctx, executionID)
+	if err != nil {
+		return nil, err
+	}
+	target := strings.TrimSpace(bundle.bindings.ownerDecisionNode)
+	if target == "" {
+		return nil, fmt.Errorf("%w: callback owner decision for plan version %s", ErrBundleOperationUnsupported, bundle.plan.Version)
+	}
 	envelope, err := newCallbackDecisionEnvelope(eventID, actor, decision, reason, payload)
 	if err != nil {
 		return nil, err
@@ -90,7 +98,7 @@ func (s *Service) ResolveOwnerCallbackDecision(
 		return s.Drive(ctx, executionID)
 	}
 
-	if _, err := s.production.Engine.ResolveHuman(ctx, executionID, NodeHumanDecision, adgo.HumanResolution{
+	if _, err := bundle.engine.ResolveHuman(ctx, executionID, target, adgo.HumanResolution{
 		Decision: mapped,
 		Actor:    actor,
 		Reason:   reason,

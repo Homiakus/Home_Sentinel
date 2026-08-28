@@ -59,7 +59,7 @@ type DiagnosticsView struct {
 }
 
 func (s *Service) View(ctx context.Context, executionID string) (IncidentView, error) {
-	execution, err := s.production.Engine.Get(ctx, executionID)
+	execution, err := s.Get(ctx, executionID)
 	if err != nil {
 		return IncidentView{}, err
 	}
@@ -87,11 +87,11 @@ func (s *Service) View(ctx context.Context, executionID string) (IncidentView, e
 }
 
 func (s *Service) Explain(ctx context.Context, executionID, nodeID string) (ExplanationView, error) {
-	execution, err := s.production.Engine.Get(ctx, executionID)
+	bundle, execution, err := s.executionBundle(ctx, executionID)
 	if err != nil {
 		return ExplanationView{}, err
 	}
-	explanation := adgo.Explain(s.plan, execution, nodeID)
+	explanation := adgo.Explain(bundle.plan, execution, nodeID)
 	return ExplanationView{
 		ExecutionID: explanation.ExecutionID, NodeID: explanation.NodeID,
 		Status: explanation.Status, Reason: explanation.Reason,
@@ -100,7 +100,11 @@ func (s *Service) Explain(ctx context.Context, executionID, nodeID string) (Expl
 }
 
 func (s *Service) Diagnostics(ctx context.Context, executionID string) (DiagnosticsView, error) {
-	diagnostics, err := s.production.Engine.Diagnostics(ctx, executionID)
+	bundle, _, err := s.executionBundle(ctx, executionID)
+	if err != nil {
+		return DiagnosticsView{}, err
+	}
+	diagnostics, err := bundle.engine.Diagnostics(ctx, executionID)
 	if err != nil {
 		return DiagnosticsView{}, err
 	}
