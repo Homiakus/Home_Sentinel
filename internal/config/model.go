@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"net"
 	"net/netip"
 	"net/url"
 	"path/filepath"
@@ -117,6 +118,17 @@ func Default() Config {
 func (c Config) Validate() error {
 	if c.Server.ListenAddress == "" {
 		return errors.New("server listen address required")
+	}
+	host, _, err := net.SplitHostPort(c.Server.ListenAddress)
+	if err != nil {
+		return errors.New("server listen address must be host:port")
+	}
+	// The production HTTP server currently uses ListenAndServe and does not
+	// terminate TLS itself. Until a verified TLS listener is wired into the
+	// runtime, fail closed rather than allowing credentials or control commands
+	// to be exposed over a remote plaintext bind.
+	if !loopbackHost(host) {
+		return ErrInsecureRemoteBind
 	}
 	if c.Server.ReadTimeout <= 0 || c.Server.WriteTimeout <= 0 || c.Server.ShutdownGrace <= 0 {
 		return errors.New("server timeouts must be positive")

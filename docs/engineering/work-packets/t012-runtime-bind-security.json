@@ -1,0 +1,37 @@
+{
+  "plan_item": "T-012",
+  "intent": "Fail closed on production runtime HTTP listen addresses that would expose the current plaintext server outside loopback. Full TLS serving is deliberately out of scope for this slice.",
+  "status_before": "READY",
+  "risk_class": "CRITICAL",
+  "invariants": [
+    "The current runtime HTTP server may bind only to loopback until it actually serves TLS.",
+    "The default 127.0.0.1:8080 configuration remains valid.",
+    "Malformed listen addresses fail startup validation before application side effects.",
+    "Wildcard, unspecified, LAN and arbitrary hostname binds fail with the explicit insecure-remote-bind classification.",
+    "No certificate/TLS configuration is added unless the production listener consumes and verifies it."
+  ],
+  "contracts": [
+    "Config.Validate parses Server.ListenAddress as host:port.",
+    "localhost, IPv4 loopback and IPv6 loopback are accepted.",
+    "non-loopback hosts return ErrInsecureRemoteBind.",
+    "malformed host:port returns a validation error distinct from ErrInsecureRemoteBind."
+  ],
+  "code_surfaces": [
+    "internal/config/model.go",
+    "internal/config/model_test.go"
+  ],
+  "required_gates": [
+    "static",
+    "unit",
+    "race",
+    "security",
+    "mutation"
+  ],
+  "acceptance_evidence": [
+    "table tests cover localhost, 127/8 and ::1 acceptance",
+    "table tests reject 0.0.0.0, ::, LAN addresses, arbitrary hostname and empty-host wildcard",
+    "malformed host:port is rejected without being misclassified",
+    "Gremlins critical-diff campaign kills mutations that weaken the remote-bind guard",
+    "repository ci/security/mutation workflows pass on the pushed commit"
+  ]
+}

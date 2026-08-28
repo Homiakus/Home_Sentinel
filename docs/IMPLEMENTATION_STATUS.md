@@ -2,89 +2,74 @@
 
 ## Status semantics
 
-This is an observed snapshot, not an independent source of truth. `MASTER_PLAN.md` owns execution order/status. Detailed intent remains in `docs/AXIOM_IMPLEMENTATION_PLAN.md` and `docs/SCENARIO_SYSTEM_PLAN.md`; completion requires executable evidence.
+Observed snapshot only. `MASTER_PLAN.md` owns execution ordering/status; `docs/AXIOM_IMPLEMENTATION_PLAN.md` and `docs/SCENARIO_SYSTEM_PLAN.md` own detailed intent. Completion requires executable evidence.
 
-Before closing implementation work, run the engineering-loop reconciliation and the applicable CI/security/mutation gates.
+## Current baseline
 
-## Current main baseline
-
-Implemented/proven foundations include:
-
-- Stages 0–13 core architecture/domain/gateway/Axiom/ADGO/risk/HITL/physical-safety/correlation/recovery/read-model/security primitives and current CI baseline, with residual clauses tracked in the master plan rather than implied complete.
-- Stage 14b supply-chain baseline: committed module lock, module hygiene, reviewed immutable Action allowlist, pinned scanners, `govulncheck`, Trivy, CycloneDX module SBOM evidence and Dependabot. Release provenance/signing/reproducibility remains release qualification work.
-- Stage 16a typed fail-closed callback/security configuration and secret-reference loading baseline.
-- Stage 20a same-store cross-execution physical resource reservation for Door/Siren/Camera Recovery; multi-process fencing remains open.
-- Stages 28–34 headless Scenario foundation: canonical model, capability registry, typed/temporal semantics, compiler, Safety Compiler, static conflicts, immutable catalog/dependency index and simulator/replay.
-- Engineering loop: roadmap reconciliation, Work Packet validation, risk/gate planning, multidimensional edge-suite generation, mutation evidence validation and executable supply-chain self-check.
+- Go control plane with domain/event model, Axiom lifecycle, ADGO durable workflows, persistence/migrations, auth/authz, gateways/recovery and Scenario model/compiler/safety/catalog/simulator.
+- CI baseline: module hygiene, format, vet, unit, race, security qualification, critical-diff mutation and benchmark smoke.
+- Supply-chain baseline includes module lock, scanner/action pinning, vulnerability checks and SBOM evidence; release provenance/signing/rollback remain release qualification.
+- Runtime callback key material is loaded from secret references; callback security exposes a narrow acceptance/signing boundary.
+- Same-store physical resource reservations exist for Door/Siren/Camera Recovery; multi-process fencing remains open.
+- Headless Scenario stages 28–34 are implemented; authenticated API/UI authoring remains blocked by authority/API prerequisites.
 
 ## Stage 17 — reconciled status
 
-Stage 17 remains **PARTIAL**, but the previous summary was stale. See [`STAGE17_RECONCILIATION.md`](STAGE17_RECONCILIATION.md) for the clause-by-clause evidence matrix.
+Stage 17 remains **PARTIAL**. Detailed evidence matrix: [`STAGE17_RECONCILIATION.md`](STAGE17_RECONCILIATION.md).
 
-### Verified now
+### Verified
 
-- HTTP server read-header/read/write/idle timeouts.
-- bounded + strict JSON command decoding through the shared decoder.
-- request IDs.
-- local session authentication baseline.
-- SameSite/HttpOnly cookie behavior, CSRF middleware and CSP/security headers.
-- capability RBAC baseline for viewer/operator/admin; unlock requires the dedicated capability and recent authentication.
-- callback keyring/secret-reference runtime and replay guard.
-- exact callback execution/node/event/action binding.
-- callback human-subject validation against the current persisted user and capability grant.
-- callback authorization allow/deny audit; allowed mutation fails closed if audit persistence fails.
-- durable medium-risk callback redelivery/restart dedupe and high-risk stale-resolution safety.
-- callback exactly-once semantic resume at the orchestration boundary.
-- durable Telegram notifier semantics: frozen recipients, per-recipient receipts, safe retry, ambiguous crash-window handling and no blind resend.
+- bounded HTTP read-header/read/write/idle timeouts;
+- bounded + strict JSON command decoder;
+- request IDs;
+- local session authentication, HttpOnly/SameSite cookies, CSRF and CSP/security headers;
+- capability RBAC baseline for viewer/operator/admin; unlock requires `door:unlock` plus recent authentication;
+- callback keyring/secret-reference runtime and replay admission;
+- exact callback execution/node/event/action binding and human `usr_*` subject validation;
+- callback allow/deny authorization audit with fail-closed audit-before-allowed-mutation behavior;
+- durable medium-risk callback retry/restart dedupe and high-risk stale-resolution safety;
+- callback exactly-once semantic resume at orchestration boundary;
+- durable Telegram notifier frozen-recipient/per-recipient receipt/ambiguity semantics.
 
-### Still open/partial
+### Runtime remote-bind hardening — T-012 VERIFYING
 
-1. Production runtime currently does not enforce the hardened non-loopback/TLS rule; plaintext remote bind is possible through `Config`. **F-006 / T-012**.
-2. Secure callback acceptance/orchestration exists but is not wired to an external HTTP callback transport. **F-007 / T-013**.
-3. Principal types do not explicitly distinguish human user/service/system authority; current persisted roles are viewer/operator/admin. **F-008 / T-014**.
-4. Authorization decision auditing is complete on callback path, not a generic HTTP middleware contract; rate limiting is IP-scoped rather than per-principal. **F-009 / T-015**.
-5. Common stale-command ETag/expected-version and HTTP idempotency-key contracts are absent. **F-011 / T-016**.
-6. Browser authentication is a concrete local password/session implementation, not a pluggable local/OIDC/mTLS boundary. **F-010 / T-017**.
+The production runtime previously accepted any non-empty listen address while the server used plaintext `ListenAndServe`, even though `HardenedServerConfig` already encoded the correct remote-TLS requirement.
 
-Stage 35 authenticated Scenario API remains blocked by the relevant Stage 17 authority/concurrency prerequisites.
+T-012 now makes the current runtime **loopback-only until TLS is actually served**:
 
-## Scenario authoring audit
+- `localhost`, IPv4 loopback and `::1` remain valid;
+- wildcard/unspecified, LAN and arbitrary remote hostnames fail with `ErrInsecureRemoteBind`;
+- malformed listen values fail as malformed `host:port`, not as a remote-bind policy error;
+- the default `127.0.0.1:8080` behavior is unchanged;
+- no certificate fields or false TLS capability are introduced.
 
-Stages 28–34 are the implemented headless foundation. Remaining product track:
+Post-push CI/security/mutation evidence is still required before this item becomes DONE.
 
-- 35 — authenticated Scenario API;
-- 36 — Simple Builder;
-- 37 — Advanced Flow Editor;
-- 38 — Templates/Subflows;
-- 39 — LLM authoring through structured AST only;
-- 40 — Live Trace/Explain;
-- 41 — mobile/adaptive authoring;
-- 42 — scenario quality/security/release gates.
+### Remaining Stage 17 gaps
 
-Scenario UI/AI cannot bypass catalog/compiler/Safety Compiler/RBAC/gateway/resource-ownership boundaries.
+1. Secure callback semantics are not wired to an external HTTP callback transport. **F-007 / T-013**.
+2. Principal types do not explicitly distinguish human user/service/system authority. **F-008 / T-014**.
+3. Authorization decision auditing is callback-specific and rate limiting is IP-scoped rather than principal-aware. **F-009 / T-015**.
+4. Common stale-command ETag/expected-version and HTTP `Idempotency-Key` contracts are absent. **F-011 / T-016**.
+5. Browser authentication is concrete local password/session auth, not a pluggable local/OIDC/mTLS boundary. **F-010 / T-017**.
 
-## Important open production findings
+## Important production gaps outside Stage 17
 
-- Multi-process physical-write fencing/topology is not proven; same-store reservation is not a distributed mutex.
-- Durable plan/schema evolution and in-flight execution migration/restore remain P0.
-- Crash/restore linearization around provider effects remains P0.
-- Runtime remote plaintext bind must fail closed before an external callback endpoint is exposed.
-- Branch `main` currently lacks a technical required-check guard.
-- Target-hardware latency/allocation/load budgets remain unqualified.
-- Release provenance, reproducible artifact, signing/checksums and rollback drill remain release work.
+- durable event/lifecycle/ADGO plan versioning and in-flight upgrade/rollback;
+- crash/restore linearization around provider effects;
+- explicit single-writer versus multi-process physical fencing topology;
+- target-hardware latency/allocation/load budgets;
+- technical required-check protection for direct `main` updates;
+- reproducible release artifact/provenance/signing/checksums and restore drill.
 
-## Next dependency-aware order
+## Dependency-aware order
 
-1. T-012 — reject unsafe remote runtime bind until TLS runtime support exists.
-2. T-004 — durable schema/plan catalog and compatible upgrade path; may proceed independently of later HTTP work.
-3. T-013/T-014/T-015/T-016 — close the Stage 17 external transport/principal/audit/concurrency P0 residuals in dependency order.
-4. T-005/T-006 — crash/restore matrix and explicit process topology/fencing.
-5. T-007 / Scenario Stage 35 — authenticated Scenario API after authority/concurrency prerequisites.
-6. T-008/T-009/T-010 — hardware budgets, release qualification and verified-main guard.
-7. T-017 — pluggable authenticator boundary before claiming non-local authentication modes.
+1. Finish verification of T-012 remote-bind fail-closed guard.
+2. T-004 durable schema/plan evolution may proceed in parallel with later HTTP work.
+3. T-013/T-014/T-015/T-016 close callback transport/principal/audit/concurrency P0 residuals.
+4. T-005/T-006 crash/restore and process topology/fencing.
+5. T-007 authenticated Scenario API.
+6. T-008/T-009/T-010 operational/release/main-guard qualification.
+7. T-017 authenticator abstraction before claiming OIDC/mTLS modes.
 
-Index: `docs/PLAN_INDEX.md`  
-Engineering protocol: `docs/engineering/ENGINEERING_LOOP.md`  
-Production intent: `docs/AXIOM_IMPLEMENTATION_PLAN.md`  
-Scenario intent: `docs/SCENARIO_SYSTEM_PLAN.md`  
 Execution truth: `../MASTER_PLAN.md`
