@@ -164,25 +164,37 @@ func (s NotificationDeliveryStore) Load(ctx context.Context, idempotencyKey stri
 	return out, nil
 }
 
+// ClaimPrepared performs the durable compare-and-swap that grants permission to
+// call Telegram. claimed is true only for the caller that changed prepared to
+// sending. Other concurrent callers must never send based solely on the loaded
+// sending state.
 func (s NotificationDeliveryStore) ClaimPrepared(
 	ctx context.Context,
 	idempotencyKey string,
 	telegramUserID int64,
-) (notificationDelivery, error) {
+) (delivery notificationDelivery, claimed bool, err error) {
 	if s.DB == nil {
-		return notificationDelivery{}, errors.New("telegram notifier: delivery database unavailable")
+		return notificationDelivery{}, false, errors.New("telegram notifier: delivery database unavailable")
 	}
 	now := s.now().Format(time.RFC3339Nano)
-	_, err := s.DB.ExecContext(ctx, `
+	result, err := s.DB.ExecContext(ctx, `
 		UPDATE telegram_notification_deliveries
 		SET state=?,updated_at=?
 		WHERE idempotency_key=? AND telegram_user_id=? AND state=?`,
 		string(deliverySending), now, strings.TrimSpace(idempotencyKey), telegramUserID, string(deliveryPrepared),
 	)
 	if err != nil {
-		return notificationDelivery{}, err
+		return notificationDelivery{}, false, err
 	}
-	return s.loadDelivery(ctx, idempotencyKey, telegramUserID)
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return notificationDelivery{}, false, err
+	}
+	delivery, err = s.loadDelivery(ctx, idempotencyKey, telegramUserID)
+	if err != nil {
+		return notificationDelivery{}, false, err
+	}
+	return delivery, affected == 1, nil
 }
 
 func (s NotificationDeliveryStore) MarkApplied(
