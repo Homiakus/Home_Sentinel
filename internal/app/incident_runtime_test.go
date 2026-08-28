@@ -103,12 +103,12 @@ func TestStartIncidentRuntimeRejectsEachMissingProductionDependency(t *testing.T
 func TestClassifyIncidentServeExitMatrix(t *testing.T) {
 	serveErr := errors.New("serve failed")
 	cases := []struct {
-		name          string
-		lifecycleErr  error
-		serveErr      error
+		name           string
+		lifecycleErr   error
+		serveErr       error
 		wantUnexpected bool
-		wantNil       bool
-		wantServeErr  bool
+		wantNil        bool
+		wantServeErr   bool
 	}{
 		{name: "shutdown nil result", lifecycleErr: context.Canceled, serveErr: nil, wantNil: true},
 		{name: "shutdown preserves result", lifecycleErr: context.Canceled, serveErr: serveErr, wantServeErr: true},
