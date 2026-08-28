@@ -1,0 +1,57 @@
+name: repair-vulnerable-go-dependencies
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/repair-vuln-deps.yml
+
+concurrency:
+  group: repair-vulnerable-go-dependencies
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .go-version
+          cache: true
+
+      - name: Regenerate verified module graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          go get golang.org/x/net@v0.56.0 golang.org/x/text@v0.39.0
+          go mod tidy
+          go mod verify
+          go list ./... >/dev/null
+          go test ./... -count=1
+          test "$(go list -m -f '{{.Version}}' golang.org/x/net)" = "v0.56.0"
+          test "$(go list -m -f '{{.Version}}' golang.org/x/text)" = "v0.39.0"
+
+      - name: Commit canonical dependency repair and self-delete
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/repair-vuln-deps.yml
+          git config user.name "home-sentinel-engloop[bot]"
+          git config user.email "home-sentinel-engloop[bot]@users.noreply.github.com"
+          git add go.mod go.sum .github/workflows/repair-vuln-deps.yml
+          git diff --cached --check
+          git commit -m "security: upgrade vulnerable x/net and x/text dependencies"
+          git push origin HEAD:main
