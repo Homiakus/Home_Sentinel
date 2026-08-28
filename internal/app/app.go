@@ -59,6 +59,7 @@ type App struct {
 	Health                 *health.Registry
 	Cameras                *cameras.Service
 	Secrets                secrets.Resolver
+	CallbackSecurity       CallbackSecurity
 	Frigate                *frigateint.Service
 	MQTT                   *mqttint.Client
 	HomeAssistant          *haint.Service
@@ -124,6 +125,11 @@ func Open(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error
 	}
 	secretRoot := filepath.Join(filepath.Dir(cfg.Database.Path), "secrets")
 	a.Secrets = secrets.Resolver{File: secrets.FileProvider{Root: secretRoot}}
+	a.CallbackSecurity, err = openCallbackSecurity(cfg.Security.Callbacks, a.Secrets)
+	if err != nil {
+		_ = a.Close()
+		return nil, err
+	}
 	secretStore := secrets.FileStore{Root: secretRoot}
 	a.Cameras = &cameras.Service{Store: repository.NewStore[cameras.Camera](db, repository.KindCamera), Secrets: a.Secrets, Network: guard}
 	a.HomeAssistantSetup = &setupsvc.HomeAssistantSetup{Store: repository.NewStore[setupsvc.HomeAssistantDesired](db, repository.KindIntegration), Secrets: secretStore}
