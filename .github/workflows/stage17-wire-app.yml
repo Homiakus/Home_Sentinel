@@ -1,0 +1,66 @@
+name: stage17-wire-app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/stage17-wire-app.yml
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .go-version
+          cache: true
+
+      - name: Wire callback runtime into app.Open
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('internal/app/app.go')
+          text = path.read_text()
+
+          field_old = '\tSecrets                secrets.Resolver\n'
+          field_new = field_old + '\tCallbackSecurity       CallbackSecurity\n'
+          if field_old not in text:
+              raise SystemExit('App.Secrets anchor not found')
+          if 'CallbackSecurity       CallbackSecurity' not in text:
+              text = text.replace(field_old, field_new, 1)
+
+          init_old = '\ta.Secrets = secrets.Resolver{File: secrets.FileProvider{Root: secretRoot}}\n'
+          init_new = init_old + '''\ta.CallbackSecurity, err = openCallbackSecurity(cfg.Security.Callbacks, a.Secrets)\n\tif err != nil {\n\t\t_ = a.Close()\n\t\treturn nil, err\n\t}\n'''
+          if init_old not in text:
+              raise SystemExit('secret resolver anchor not found')
+          if 'openCallbackSecurity(cfg.Security.Callbacks, a.Secrets)' not in text:
+              text = text.replace(init_old, init_new, 1)
+
+          path.write_text(text)
+          PY
+          gofmt -w internal/app/app.go internal/app/callback_security.go
+          go test ./internal/config ./internal/security/callback ./internal/app
+          go test -race ./internal/security/callback ./internal/app
+
+      - name: Commit verified wiring and remove bootstrap
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/stage17-wire-app.yml
+          git add internal/app/app.go internal/app/callback_security.go
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "app(security): initialize callback runtime fail closed"
+          git push origin HEAD:main
