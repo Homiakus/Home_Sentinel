@@ -1,0 +1,53 @@
+{
+  "plan_item": "Stage 17 / callback runtime and durable incident resume",
+  "intent": "Wire reviewed callback keys into the runtime without exposing secret material, authenticate external incident callbacks at the application boundary, and resume the exact durable ADGO incident wait/human node without granting callback credentials authority over any other execution or action.",
+  "status_before": "PARTIAL",
+  "risk_class": "CRITICAL",
+  "invariants": [
+    "Callback runtime is disabled by default and application startup fails closed when enabled configuration, key references, key material or replay policy are invalid.",
+    "Secret values never enter runtime JSON, logs, audit details or HTTP responses; only secret references and key IDs are configuration data.",
+    "A callback can target only the execution, node, event and action bound into its signed claims.",
+    "Medium-risk owner acknowledgement uses the durable ADGO inbox event ID and therefore remains deduplicated across redelivery and process restart.",
+    "High-risk owner decisions can resolve only the configured incident human node; a stale or already-resolved node cannot execute a second semantic transition.",
+    "Callback authentication is bearer-token based and independent of cookie sessions/CSRF; callback credentials are never forwarded to downstream integrations.",
+    "Every accepted or rejected callback decision produces an audit record without recording the bearer token or signing key material."
+  ],
+  "contracts": [
+    "internal/security/callback Acceptor/Keyring/ReplayGuard",
+    "internal/orchestration/incident durable ADGO workflow",
+    "internal/repository AuditStore",
+    "internal/secrets secret-reference resolver",
+    "docs/ARCHITECTURE.md security authority and orchestration boundaries",
+    "docs/testing/MUTATION_TESTING.md"
+  ],
+  "code_surfaces": [
+    "internal/config/model.go",
+    "internal/config/runtime_load.go",
+    "internal/app/app.go",
+    "internal/security/callback",
+    "internal/orchestration/incident",
+    "internal/httpserver"
+  ],
+  "required_gates": [
+    "static",
+    "unit",
+    "property",
+    "fuzz",
+    "race",
+    "contract",
+    "integration",
+    "fault",
+    "mutation-critical",
+    "replay",
+    "security"
+  ],
+  "acceptance_evidence": [
+    "Disabled-by-default and malformed-enabled callback configuration tests pass.",
+    "Secret-reference resolution and key-rotation overlap tests pass without exposing key bytes.",
+    "Binding mismatch, tampered bearer, expired token and unknown-key requests fail closed and are audited.",
+    "Concurrent duplicate callback delivery changes one durable incident execution at most once.",
+    "Restart/redelivery tests prove medium-risk event dedupe and high-risk stale-resolution safety.",
+    "Packet-wide critical mutation testing has no LIVED, NOT COVERED or TIMED OUT blockers.",
+    "Repository CI, race and supply-chain/security qualification remain green."
+  ]
+}
