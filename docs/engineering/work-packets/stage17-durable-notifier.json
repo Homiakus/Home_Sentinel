@@ -1,0 +1,58 @@
+{
+  "plan_item": "Stage 17 / durable production incident notifier",
+  "intent": "Implement a production Telegram gateway.Notifier with durable per-recipient SQLite delivery receipts so incident notification side effects are idempotent when confirmed, fail closed on semantic reuse, and become explicitly ambiguous rather than blindly resent after an uncertain crash window.",
+  "status_before": "MISSING",
+  "risk_class": "CRITICAL",
+  "invariants": [
+    "A notification operation is identified by a non-empty ADGO idempotency key and a canonical semantic digest; reuse of the same key with different notification semantics fails closed.",
+    "The first accepted operation freezes its authorized Telegram recipient set; later retries never silently add or replace recipients because bindings or user roles changed.",
+    "Each frozen recipient has an independent durable receipt, allowing partial fan-out without resending recipients already confirmed applied.",
+    "A recipient is eligible only when the Telegram binding is active, the mapped Home Sentinel user still exists, is enabled, and currently has the notifier's configured capability when the recipient set is first frozen.",
+    "An empty authorized recipient set is an error and is never reported as an applied notification.",
+    "Before a provider call, a recipient transitions durably from prepared to sending. If the process restarts with sending state, the operation returns EffectAmbiguous and never blindly resends that recipient.",
+    "A confirmed Telegram SendMessage success records applied plus provider message id; an exact later retry returns EffectAlreadyApplied without another provider call.",
+    "Confirmed provider rejection may retry only recipients whose provider effect is known not to have happened; transport/unknown-response failure is treated as ambiguous.",
+    "Concurrent duplicate Notify calls result in at most one provider send attempt per recipient.",
+    "No bot token, notification body, callback bearer, or other secret material is stored in receipt diagnostics beyond the minimum canonical digest and provider identifiers required for reconciliation."
+  ],
+  "contracts": [
+    "internal/gateway.Notifier and EffectResult",
+    "internal/integrations/telegram.Client.SendMessage",
+    "internal/telegram.PairingStore active bindings",
+    "internal/telegram.UserLookup current principals",
+    "internal/authz capability checks",
+    "internal/database embedded transactional migrations",
+    "internal/orchestration/incident FailureAmbiguousSideEffect handling",
+    "docs/testing/MUTATION_TESTING.md"
+  ],
+  "code_surfaces": [
+    "internal/database/migrations/0008_notification_delivery.sql",
+    "internal/telegram/notifier.go",
+    "internal/telegram/notifier_store.go",
+    "internal/telegram/*_test.go"
+  ],
+  "required_gates": [
+    "static",
+    "unit",
+    "property",
+    "fuzz",
+    "race",
+    "contract",
+    "integration",
+    "fault",
+    "mutation-critical",
+    "replay",
+    "security"
+  ],
+  "acceptance_evidence": [
+    "Migration creates receipt storage transactionally and remains idempotent across repeated database startup.",
+    "First successful fan-out returns EffectApplied; exact retry returns EffectAlreadyApplied with no extra Telegram provider call.",
+    "Same idempotency key with changed title, body, media, channel or frozen recipient semantics fails closed.",
+    "Crash/reopen with any recipient left in sending returns EffectAmbiguous and proves no blind resend.",
+    "Partial fan-out retries only safe prepared recipients and never resends applied or ambiguous recipients.",
+    "Revoked, disabled, missing and unauthorized users are excluded before recipient freeze; zero eligible recipients fails closed.",
+    "Concurrent duplicate Notify calls produce at most one provider send attempt per recipient under the race detector.",
+    "Packet-wide mutation testing has zero LIVED, NOT COVERED and TIMED OUT mutations in changed notifier semantics.",
+    "Repository CI, race and supply-chain/security qualification remain green before merge."
+  ]
+}
