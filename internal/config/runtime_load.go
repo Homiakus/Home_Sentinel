@@ -63,8 +63,18 @@ type runtimeFileNetwork struct {
 }
 
 type runtimeFileSecurity struct {
-	SessionTTL   *string `json:"session_ttl,omitempty"`
-	SecureCookie *bool   `json:"secure_cookie,omitempty"`
+	SessionTTL   *string               `json:"session_ttl,omitempty"`
+	SecureCookie *bool                 `json:"secure_cookie,omitempty"`
+	Callbacks    *runtimeFileCallbacks `json:"callbacks,omitempty"`
+}
+
+type runtimeFileCallbacks struct {
+	Enabled        *bool              `json:"enabled,omitempty"`
+	ActiveKeyID    *string            `json:"active_key_id,omitempty"`
+	Keys           *map[string]string `json:"keys,omitempty"`
+	MaxTTL         *string            `json:"max_ttl,omitempty"`
+	ClockSkew      *string            `json:"clock_skew,omitempty"`
+	ReplayCapacity *int               `json:"replay_capacity,omitempty"`
 }
 
 type runtimeFileHomeAssistant struct {
@@ -184,6 +194,23 @@ func applyRuntimeFile(cfg *Config, wire runtimeFileConfig) error {
 		}
 		if v.SecureCookie != nil {
 			cfg.Security.SecureCookie = *v.SecureCookie
+		}
+		if cb := v.Callbacks; cb != nil {
+			assignBool(cb.Enabled, &cfg.Security.Callbacks.Enabled)
+			assignString(cb.ActiveKeyID, &cfg.Security.Callbacks.ActiveKeyID)
+			if cb.Keys != nil {
+				cfg.Security.Callbacks.Keys = make(map[string]secrets.Ref, len(*cb.Keys))
+				for id, ref := range *cb.Keys {
+					cfg.Security.Callbacks.Keys[strings.TrimSpace(id)] = secrets.Ref(strings.TrimSpace(ref))
+				}
+			}
+			if err := assignDuration("security.callbacks.max_ttl", cb.MaxTTL, &cfg.Security.Callbacks.MaxTTL); err != nil {
+				return err
+			}
+			if err := assignDuration("security.callbacks.clock_skew", cb.ClockSkew, &cfg.Security.Callbacks.ClockSkew); err != nil {
+				return err
+			}
+			assignInt(cb.ReplayCapacity, &cfg.Security.Callbacks.ReplayCapacity)
 		}
 	}
 	if v := wire.HomeAssistant; v != nil {
@@ -320,6 +347,7 @@ func applyRuntimeEnv(cfg *Config, lookup LookupEnv) error {
 	stringEnv("SENTINEL_AI_URL", &cfg.AI.URL)
 	stringEnv("SENTINEL_AI_MODEL", &cfg.AI.Model)
 	stringEnv("SENTINEL_BACKUP_REPOSITORY", &cfg.Backup.Repository)
+	stringEnv("SENTINEL_CALLBACK_ACTIVE_KEY_ID", &cfg.Security.Callbacks.ActiveKeyID)
 
 	csvEnv("SENTINEL_CAMERA_CIDRS", &cfg.Network.CameraCIDRs)
 	csvEnv("SENTINEL_FRIGATE_WEBRTC_CANDIDATES", &cfg.Frigate.WebRTCCandidates)
@@ -330,6 +358,13 @@ func applyRuntimeEnv(cfg *Config, lookup LookupEnv) error {
 	secretEnv("SENTINEL_MQTT_PASSWORD_REF", &cfg.MQTT.PasswordRef)
 	secretEnv("SENTINEL_TELEGRAM_TOKEN_REF", &cfg.Telegram.TokenRef)
 	secretEnv("SENTINEL_BACKUP_PASSWORD_REF", &cfg.Backup.PasswordRef)
+	if raw, ok := lookup("SENTINEL_CALLBACK_KEYS"); ok {
+		refs, err := parseSecretRefMap(raw)
+		if err != nil {
+			return fmt.Errorf("config: SENTINEL_CALLBACK_KEYS: %w", err)
+		}
+		cfg.Security.Callbacks.Keys = refs
+	}
 
 	for key, target := range map[string]*bool{
 		"SENTINEL_HA_ENABLED":       &cfg.HomeAssistant.Enabled,
@@ -339,6 +374,7 @@ func applyRuntimeEnv(cfg *Config, lookup LookupEnv) error {
 		"SENTINEL_TELEGRAM_ENABLED": &cfg.Telegram.Enabled,
 		"SENTINEL_BACKUP_ENABLED":   &cfg.Backup.Enabled,
 		"SENTINEL_SECURE_COOKIE":    &cfg.Security.SecureCookie,
+		"SENTINEL_CALLBACK_ENABLED": &cfg.Security.Callbacks.Enabled,
 		"SENTINEL_EXPERIMENTAL":     &cfg.Features.Experimental,
 	} {
 		if err := boolEnv(key, target); err != nil {
@@ -346,25 +382,28 @@ func applyRuntimeEnv(cfg *Config, lookup LookupEnv) error {
 		}
 	}
 	for key, target := range map[string]*time.Duration{
-		"SENTINEL_READ_TIMEOUT":         &cfg.Server.ReadTimeout,
-		"SENTINEL_WRITE_TIMEOUT":        &cfg.Server.WriteTimeout,
-		"SENTINEL_SHUTDOWN_GRACE":       &cfg.Server.ShutdownGrace,
-		"SENTINEL_DB_BUSY_TIMEOUT":      &cfg.Database.BusyTimeout,
-		"SENTINEL_SESSION_TTL":          &cfg.Security.SessionTTL,
-		"SENTINEL_MQTT_KEEP_ALIVE":      &cfg.MQTT.KeepAlive,
-		"SENTINEL_MQTT_SESSION_EXPIRY":  &cfg.MQTT.SessionExpiry,
-		"SENTINEL_MQTT_CONNECT_TIMEOUT": &cfg.MQTT.ConnectTimeout,
-		"SENTINEL_BACKUP_INTERVAL":      &cfg.Backup.Interval,
+		"SENTINEL_READ_TIMEOUT":          &cfg.Server.ReadTimeout,
+		"SENTINEL_WRITE_TIMEOUT":         &cfg.Server.WriteTimeout,
+		"SENTINEL_SHUTDOWN_GRACE":        &cfg.Server.ShutdownGrace,
+		"SENTINEL_DB_BUSY_TIMEOUT":       &cfg.Database.BusyTimeout,
+		"SENTINEL_SESSION_TTL":           &cfg.Security.SessionTTL,
+		"SENTINEL_CALLBACK_MAX_TTL":      &cfg.Security.Callbacks.MaxTTL,
+		"SENTINEL_CALLBACK_CLOCK_SKEW":   &cfg.Security.Callbacks.ClockSkew,
+		"SENTINEL_MQTT_KEEP_ALIVE":       &cfg.MQTT.KeepAlive,
+		"SENTINEL_MQTT_SESSION_EXPIRY":   &cfg.MQTT.SessionExpiry,
+		"SENTINEL_MQTT_CONNECT_TIMEOUT":  &cfg.MQTT.ConnectTimeout,
+		"SENTINEL_BACKUP_INTERVAL":       &cfg.Backup.Interval,
 	} {
 		if err := durationEnv(key, target); err != nil {
 			return err
 		}
 	}
 	for key, target := range map[string]*int{
-		"SENTINEL_BACKUP_KEEP_HOURLY":  &cfg.Backup.KeepHourly,
-		"SENTINEL_BACKUP_KEEP_DAILY":   &cfg.Backup.KeepDaily,
-		"SENTINEL_BACKUP_KEEP_WEEKLY":  &cfg.Backup.KeepWeekly,
-		"SENTINEL_BACKUP_KEEP_MONTHLY": &cfg.Backup.KeepMonthly,
+		"SENTINEL_CALLBACK_REPLAY_CAPACITY": &cfg.Security.Callbacks.ReplayCapacity,
+		"SENTINEL_BACKUP_KEEP_HOURLY":       &cfg.Backup.KeepHourly,
+		"SENTINEL_BACKUP_KEEP_DAILY":        &cfg.Backup.KeepDaily,
+		"SENTINEL_BACKUP_KEEP_WEEKLY":       &cfg.Backup.KeepWeekly,
+		"SENTINEL_BACKUP_KEEP_MONTHLY":      &cfg.Backup.KeepMonthly,
 	} {
 		if err := intEnv(key, target); err != nil {
 			return err
@@ -419,4 +458,28 @@ func splitCSV(raw string) []string {
 		}
 	}
 	return out
+}
+
+func parseSecretRefMap(raw string) (map[string]secrets.Ref, error) {
+	out := map[string]secrets.Ref{}
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		id, ref, ok := strings.Cut(entry, "=")
+		id = strings.TrimSpace(id)
+		ref = strings.TrimSpace(ref)
+		if !ok || id == "" || ref == "" {
+			return nil, fmt.Errorf("expected key-id=secret-ref entry, got %q", entry)
+		}
+		if _, exists := out[id]; exists {
+			return nil, fmt.Errorf("duplicate callback key id %q", id)
+		}
+		out[id] = secrets.Ref(ref)
+	}
+	if len(out) == 0 {
+		return nil, errors.New("at least one callback key reference is required")
+	}
+	return out, nil
 }
