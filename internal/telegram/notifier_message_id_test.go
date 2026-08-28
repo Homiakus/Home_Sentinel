@@ -27,7 +27,7 @@ func TestDurableNotifierProviderMessageIDLowerBound(t *testing.T) {
 			defer db.Close()
 
 			result, err := notifier.Notify(context.Background(), gateway.Operation{
-				ExecutionID: "incident-message-id-" + tc.name,
+				ExecutionID:    "incident-message-id-" + tc.name,
 				IdempotencyKey: "notify-message-id-" + tc.name,
 			}, ownerNotification("provider id boundary"))
 			if err != nil {
