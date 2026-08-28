@@ -1,5 +1,5 @@
 {
-  "packet": "docs/engineering/work-packets/stage17-durable-notifier.json",
-  "mutation_base": "f353b674dd45790677aa21debb53e19b8596dd13",
+  "packet": "docs/engineering/work-packets/stage17-incident-runtime-wiring.json",
+  "mutation_base": "adcb211d9028332a1cf725a96d57fdc935fc2f76",
   "max_commits": 48
 }

@@ -492,12 +492,19 @@ func TestDurableNotifierConcurrentDuplicateAtMostOneProviderSend(t *testing.T) {
 		results <- outcome{result: result, err: err}
 	}()
 
-	// Give the second caller a deterministic opportunity to observe the durable
-	// sending state before the first provider call completes.
-	time.Sleep(20 * time.Millisecond)
+	// The first provider call is blocked, so the first result available here
+	// must come from the duplicate caller observing durable sending state.
+	var second outcome
+	select {
+	case second = <-results:
+	case <-time.After(time.Second):
+		t.Fatal("duplicate caller did not converge while provider call was fenced")
+	}
+	if second.err != nil || second.result.State != gateway.EffectAmbiguous {
+		t.Fatalf("duplicate caller result=%+v err=%v", second.result, second.err)
+	}
 	close(release)
 	first := <-results
-	second := <-results
 	if first.err != nil || second.err != nil {
 		t.Fatalf("concurrent errors: first=%v second=%v", first.err, second.err)
 	}
