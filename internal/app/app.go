@@ -69,6 +69,7 @@ type App struct {
 	AI                     *ai.Service
 	AIPolicies             ai.PolicyStore
 	Telegram               *tgsvc.Service
+	IncidentRuntime        *IncidentRuntime
 	Metrics                *telemetry.Metrics
 	Search                 *searchsvc.Service
 	Watchdog               *watchdog.Manager
@@ -285,6 +286,10 @@ func Open(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error
 			return nil, fmt.Errorf("start Telegram service: %w", err)
 		}
 	}
+	if err := a.startIncidentRuntime(); err != nil {
+		_ = a.Close()
+		return nil, err
+	}
 	a.startWatchdog()
 	return a, nil
 }
@@ -349,6 +354,12 @@ func (a *App) Close() error {
 	if a.Watchdog != nil {
 		a.Watchdog.Close()
 		a.Watchdog = nil
+	}
+	if a.IncidentRuntime != nil {
+		if err := a.IncidentRuntime.Close(); err != nil && first == nil {
+			first = err
+		}
+		a.IncidentRuntime = nil
 	}
 	if a.Incidents != nil {
 		a.Incidents.Close()

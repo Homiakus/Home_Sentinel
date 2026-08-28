@@ -27,8 +27,9 @@ type IncidentRuntime struct {
 	cancel context.CancelFunc
 	done   chan error
 
-	mu       sync.RWMutex
-	serveErr error
+	mu        sync.RWMutex
+	serveErr  error
+	closed    bool
 	closeOnce sync.Once
 	closeErr  error
 }
@@ -96,7 +97,11 @@ func (r *IncidentRuntime) operational() error {
 	}
 	r.mu.RLock()
 	err := r.serveErr
+	closed := r.closed
 	r.mu.RUnlock()
+	if closed {
+		return ErrIncidentRuntimeUnavailable
+	}
 	if err != nil {
 		return errors.Join(ErrIncidentRuntimeUnavailable, fmt.Errorf("incident serve loop stopped: %w", err))
 	}
@@ -137,6 +142,9 @@ func (r *IncidentRuntime) Close() error {
 		return nil
 	}
 	r.closeOnce.Do(func() {
+		r.mu.Lock()
+		r.closed = true
+		r.mu.Unlock()
 		if r.cancel != nil {
 			r.cancel()
 		}
@@ -163,9 +171,9 @@ func (a *App) startIncidentRuntime() error {
 		return ErrIncidentRuntimeUnavailable
 	}
 	if !a.Config.Telegram.Enabled {
-		if a.Config.Security.Callbacks.Enabled {
-			return errors.New("application: incident callbacks require the production Telegram notifier")
-		}
+		// CallbackSecurity may exist independently as a cryptographic authority.
+		// Without a production notifier we intentionally expose no incident
+		// runtime and therefore no CallbackIngress.
 		return nil
 	}
 	if a.DB == nil || a.Users == nil || a.Audit == nil || a.Telegram == nil || a.Telegram.Client == nil {
@@ -178,7 +186,7 @@ func (a *App) startIncidentRuntime() error {
 		Users:      a.Users,
 		Deliveries: tgsvc.NotificationDeliveryStore{DB: a.DB},
 	}
-	root := filepath.Join(filepath.Dir(a.Config.Database.Path), "orchestration", "incident")
+	root := incidentRuntimeRoot(a.Config.Database.Path)
 	config := orchestrationincident.DefaultConfig(root)
 	runtime, err := openIncidentRuntime(a.runCtx, incidentRuntimeOptions{
 		Config:           config,

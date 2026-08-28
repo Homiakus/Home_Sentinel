@@ -158,8 +158,11 @@ func TestAppIncidentRuntimeConfigurationGate(t *testing.T) {
 
 	cfg.Security.Callbacks.Enabled = true
 	a = &App{Config: cfg}
-	if err := a.startIncidentRuntime(); err == nil {
-		t.Fatal("callback authority enabled without production notifier")
+	if err := a.startIncidentRuntime(); err != nil {
+		t.Fatalf("callback security without a notifier should remain transport-inert: %v", err)
+	}
+	if a.IncidentRuntime != nil {
+		t.Fatal("callback security alone created a production incident runtime")
 	}
 }
 
