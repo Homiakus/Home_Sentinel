@@ -1,7 +1,7 @@
 {
   "plan_item": "Stage 17 / durable production incident notifier",
   "intent": "Implement a production Telegram gateway.Notifier with durable per-recipient SQLite delivery receipts so incident notification side effects are idempotent when confirmed, fail closed on semantic reuse, and become explicitly ambiguous rather than blindly resent after an uncertain crash window.",
-  "status_before": "MISSING",
+  "status_before": "OPEN",
   "risk_class": "CRITICAL",
   "invariants": [
     "A notification operation is identified by a non-empty ADGO idempotency key and a canonical semantic digest; reuse of the same key with different notification semantics fails closed.",
