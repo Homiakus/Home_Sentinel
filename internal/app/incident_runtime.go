@@ -29,6 +29,7 @@ type IncidentRuntime struct {
 
 	mu        sync.RWMutex
 	serveErr  error
+	stopped   bool
 	closed    bool
 	closeOnce sync.Once
 	closeErr  error
@@ -78,17 +79,33 @@ func openIncidentRuntime(parent context.Context, opts incidentRuntimeOptions) (*
 }
 
 func (r *IncidentRuntime) serve(ctx context.Context, onServeError func(error)) {
-	err := r.Workflow.Serve(ctx)
-	if err != nil && !errors.Is(err, context.Canceled) {
-		r.mu.Lock()
-		r.serveErr = err
-		r.mu.Unlock()
-		if onServeError != nil {
-			onServeError(err)
-		}
+	rawErr := r.Workflow.Serve(ctx)
+	serveErr := classifyIncidentServeExit(ctx.Err(), rawErr)
+
+	r.mu.Lock()
+	r.stopped = true
+	r.serveErr = serveErr
+	r.mu.Unlock()
+
+	if serveErr != nil && onServeError != nil {
+		onServeError(serveErr)
 	}
-	r.done <- err
+	if serveErr != nil {
+		r.done <- serveErr
+	} else {
+		r.done <- rawErr
+	}
 	close(r.done)
+}
+
+func classifyIncidentServeExit(lifecycleErr, serveErr error) error {
+	if lifecycleErr != nil {
+		return nil
+	}
+	if serveErr == nil {
+		return errors.New("application: incident orchestration serve loop stopped unexpectedly")
+	}
+	return serveErr
 }
 
 func (r *IncidentRuntime) operational() error {
@@ -97,13 +114,14 @@ func (r *IncidentRuntime) operational() error {
 	}
 	r.mu.RLock()
 	err := r.serveErr
+	stopped := r.stopped
 	closed := r.closed
 	r.mu.RUnlock()
-	if closed {
+	if closed || stopped {
+		if err != nil {
+			return errors.Join(ErrIncidentRuntimeUnavailable, fmt.Errorf("incident serve loop stopped: %w", err))
+		}
 		return ErrIncidentRuntimeUnavailable
-	}
-	if err != nil {
-		return errors.Join(ErrIncidentRuntimeUnavailable, fmt.Errorf("incident serve loop stopped: %w", err))
 	}
 	return nil
 }
@@ -163,26 +181,22 @@ func (r *IncidentRuntime) Close() error {
 }
 
 // startIncidentRuntime wires the currently supported production notifier.
-// Telegram disabled means no production orchestration today; callback authority
-// cannot be enabled in that state because medium/high workflows could not have
-// produced the owner notification that precedes their callback nodes.
+// CallbackSecurity may exist independently, but no CallbackIngress is exposed
+// unless this production workflow and its durable notifier are both available.
 func (a *App) startIncidentRuntime() error {
 	if a == nil {
 		return ErrIncidentRuntimeUnavailable
 	}
 	if !a.Config.Telegram.Enabled {
-		// CallbackSecurity may exist independently as a cryptographic authority.
-		// Without a production notifier we intentionally expose no incident
-		// runtime and therefore no CallbackIngress.
 		return nil
 	}
-	if a.DB == nil || a.Users == nil || a.Audit == nil || a.Telegram == nil || a.Telegram.Client == nil {
+	if a.DB == nil || a.Users == nil || a.Audit == nil || a.Telegram == nil || a.Telegram.Client == nil || a.runCtx == nil || a.Health == nil || a.Log == nil {
 		return errors.New("application: incident runtime dependencies unavailable")
 	}
 
 	notifier := &tgsvc.DurableNotifier{
 		Sender:     a.Telegram.Client,
-		Pairings:   tgsvc.PairingStore{DB: a.DB},
+		Pairings:   a.Telegram.Pairings,
 		Users:      a.Users,
 		Deliveries: tgsvc.NotificationDeliveryStore{DB: a.DB},
 	}
