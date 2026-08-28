@@ -1,0 +1,26 @@
+{
+  "name": "stage17-callback-acceptance",
+  "strength": 4,
+  "max_candidates": 5000,
+  "factors": [
+    {"name": "signature", "values": ["valid", "tampered"]},
+    {"name": "key", "values": ["active", "previous", "unknown"]},
+    {"name": "time", "values": ["valid", "expiry-boundary", "expired", "future-issued"]},
+    {"name": "execution", "values": ["match", "mismatch"]},
+    {"name": "node", "values": ["match", "mismatch"]},
+    {"name": "event", "values": ["match", "mismatch"]},
+    {"name": "action", "values": ["match", "missing-or-mismatch"]},
+    {"name": "replay", "values": ["first", "duplicate", "concurrent-duplicate"]}
+  ],
+  "required": [
+    {"signature": "valid", "key": "active", "time": "valid", "execution": "match", "node": "match", "event": "match", "action": "match", "replay": "first"},
+    {"signature": "valid", "key": "previous", "time": "valid", "execution": "match", "node": "match", "event": "match", "action": "match", "replay": "first"},
+    {"signature": "tampered", "key": "active", "time": "valid", "execution": "match", "node": "match", "event": "match", "action": "match", "replay": "first"},
+    {"signature": "valid", "key": "active", "time": "expired", "execution": "match", "node": "match", "event": "match", "action": "match", "replay": "first"},
+    {"signature": "valid", "key": "active", "time": "valid", "execution": "mismatch", "node": "match", "event": "match", "action": "match", "replay": "first"},
+    {"signature": "valid", "key": "active", "time": "valid", "execution": "match", "node": "mismatch", "event": "match", "action": "match", "replay": "first"},
+    {"signature": "valid", "key": "active", "time": "valid", "execution": "match", "node": "match", "event": "mismatch", "action": "match", "replay": "first"},
+    {"signature": "valid", "key": "active", "time": "valid", "execution": "match", "node": "match", "event": "match", "action": "missing-or-mismatch", "replay": "first"},
+    {"signature": "valid", "key": "active", "time": "valid", "execution": "match", "node": "match", "event": "match", "action": "match", "replay": "concurrent-duplicate"}
+  ]
+}
