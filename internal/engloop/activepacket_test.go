@@ -80,8 +80,12 @@ func TestLoadActiveWorkPacketRejectsMultipleJSONValues(t *testing.T) {
   "mutation_base":"38163bba63b7dee147bd1edfe579db86c11a53f7",
   "max_commits":64
 } {"extra":true}`)
-	if _, _, err := LoadActiveWorkPacket(root); err == nil {
+	_, _, err := LoadActiveWorkPacket(root)
+	if err == nil {
 		t.Fatal("multiple active-packet JSON values accepted")
+	}
+	if !strings.Contains(err.Error(), "multiple JSON values") {
+		t.Fatalf("multiple JSON values produced wrong diagnostic: %v", err)
 	}
 }
 
