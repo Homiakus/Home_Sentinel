@@ -42,6 +42,7 @@ type NetworkConfig struct{ CameraCIDRs []string }
 type SecurityConfig struct {
 	SessionTTL   time.Duration
 	SecureCookie bool
+	Callbacks    CallbackRuntimeConfig
 }
 
 type HomeAssistantConfig struct {
@@ -99,7 +100,7 @@ func Default() Config {
 		},
 		Database: DatabaseConfig{Path: filepath.FromSlash("data/sentinel.db"), BusyTimeout: 5 * time.Second},
 		Network:  NetworkConfig{CameraCIDRs: []string{"192.168.0.0/16", "10.0.0.0/8", "172.16.0.0/12"}},
-		Security: SecurityConfig{SessionTTL: 12 * time.Hour, SecureCookie: true},
+		Security: SecurityConfig{SessionTTL: 12 * time.Hour, SecureCookie: true, Callbacks: DefaultCallbackRuntimeConfig()},
 		AI:       AIConfig{URL: "http://127.0.0.1:11434"},
 		Frigate:  FrigateConfig{CredentialsDirectory: filepath.FromSlash("data/frigate-secrets")},
 		Backup:   BackupConfig{Interval: 6 * time.Hour, KeepHourly: 24, KeepDaily: 14, KeepWeekly: 8, KeepMonthly: 12},
@@ -125,6 +126,9 @@ func (c Config) Validate() error {
 	}
 	if c.Security.SessionTTL <= 0 {
 		return errors.New("security session TTL must be positive")
+	}
+	if err := c.Security.Callbacks.Validate(); err != nil {
+		return err
 	}
 	for _, raw := range c.Network.CameraCIDRs {
 		if _, err := netip.ParsePrefix(raw); err != nil {
