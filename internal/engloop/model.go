@@ -294,6 +294,9 @@ func isCriticalSurface(p string) bool {
 		// Missing this prefix would let a CRITICAL work packet request mutation
 		// testing while producing zero mutation targets for notifier semantics.
 		"internal/telegram/notifier",
+		// The application incident runtime owns durable orchestration lifecycle
+		// and callback authority; mutations here can change fail-closed behavior.
+		"internal/app/incident_runtime",
 	)
 }
 
