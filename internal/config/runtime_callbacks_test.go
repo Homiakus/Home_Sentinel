@@ -78,12 +78,12 @@ func TestCallbackRuntimeAcceptsInclusivePolicyBoundaries(t *testing.T) {
 	for _, tc := range []CallbackRuntimeConfig{
 		{
 			Enabled: true, ActiveKeyID: "active",
-			Keys: map[string]secrets.Ref{"active": secrets.Ref("secret://file/callback-active.key")},
+			Keys:   map[string]secrets.Ref{"active": secrets.Ref("secret://file/callback-active.key")},
 			MaxTTL: time.Nanosecond, ClockSkew: 0, ReplayCapacity: 1,
 		},
 		{
 			Enabled: true, ActiveKeyID: "active",
-			Keys: map[string]secrets.Ref{"active": secrets.Ref("secret://env/CALLBACK_ACTIVE")},
+			Keys:   map[string]secrets.Ref{"active": secrets.Ref("secret://env/CALLBACK_ACTIVE")},
 			MaxTTL: time.Hour, ClockSkew: 5 * time.Minute, ReplayCapacity: 1_000_000,
 		},
 	} {
