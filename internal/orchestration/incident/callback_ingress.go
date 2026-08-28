@@ -36,7 +36,7 @@ type CallbackAuditStore interface {
 
 type CallbackWorkflow interface {
 	OwnerResponse(context.Context, string, string, any) (*adgo.Execution, error)
-	ResolveOwnerDecision(context.Context, string, domainincident.Decision, string, string, any) (*adgo.Execution, error)
+	ResolveOwnerCallbackDecision(context.Context, string, string, domainincident.Decision, string, string, any) (*adgo.Execution, error)
 }
 
 type CallbackIngress struct {
@@ -68,6 +68,9 @@ func (s *CallbackIngress) OwnerResponse(
 	if _, _, err := s.authorize(ctx, token, expected, authz.AcknowledgeIncident, meta); err != nil {
 		return nil, err
 	}
+	// A cryptographically valid replay is allowed to reach only this exact,
+	// already-bound durable signal. ADGO SeenEvents is the semantic dedupe layer,
+	// so a lost HTTP response can be retried without a second transition.
 	return s.Workflow.OwnerResponse(ctx, expected.ExecutionID, expected.EventID, payload)
 }
 
@@ -91,7 +94,15 @@ func (s *CallbackIngress) ResolveOwnerDecision(
 	if err != nil {
 		return nil, err
 	}
-	return s.Workflow.ResolveOwnerDecision(ctx, expected.ExecutionID, decision, user.ID, strings.TrimSpace(reason), payload)
+	return s.Workflow.ResolveOwnerCallbackDecision(
+		ctx,
+		expected.ExecutionID,
+		expected.EventID,
+		decision,
+		user.ID,
+		strings.TrimSpace(reason),
+		payload,
+	)
 }
 
 func (s *CallbackIngress) authorize(
@@ -104,16 +115,17 @@ func (s *CallbackIngress) authorize(
 	if s == nil || s.Security == nil || s.Users == nil || s.Audit == nil || s.Workflow == nil {
 		return auth.User{}, callback.Claims{}, ErrCallbackIngressUnavailable
 	}
-	claims, err := s.Security.Accept(token, expected)
-	if err != nil {
-		auditErr := s.auditDecision(ctx, "external-callback", expected, "denied", callbackReason(err), "", capability, meta)
+	claims, verificationErr := s.Security.Accept(token, expected)
+	replayCandidate := errors.Is(verificationErr, callback.ErrReplay)
+	if verificationErr != nil && !replayCandidate {
+		auditErr := s.auditDecision(ctx, "external-callback", expected, "denied", callbackReason(verificationErr), "", capability, meta)
 		if auditErr != nil {
-			return auth.User{}, callback.Claims{}, errors.Join(err, fmt.Errorf("audit callback denial: %w", auditErr))
+			return auth.User{}, callback.Claims{}, errors.Join(verificationErr, fmt.Errorf("audit callback denial: %w", auditErr))
 		}
-		return auth.User{}, callback.Claims{}, err
+		return auth.User{}, callback.Claims{}, verificationErr
 	}
 	if !domain.ID(claims.Subject).ValidFor("usr") {
-		err = ErrCallbackSubjectInvalid
+		err := ErrCallbackSubjectInvalid
 		auditErr := s.auditDecision(ctx, "external-callback", expected, "denied", "invalid_subject", claims.KeyID, capability, meta)
 		if auditErr != nil {
 			return auth.User{}, callback.Claims{}, errors.Join(err, fmt.Errorf("audit callback denial: %w", auditErr))
@@ -122,14 +134,18 @@ func (s *CallbackIngress) authorize(
 	}
 	user, userErr := s.Users.GetByID(ctx, claims.Subject)
 	if userErr != nil || user.Disabled || !authz.Allowed(user.Role, capability) {
-		err = ErrCallbackForbidden
+		err := ErrCallbackForbidden
 		auditErr := s.auditDecision(ctx, claims.Subject, expected, "denied", "principal_not_authorized", claims.KeyID, capability, meta)
 		if auditErr != nil {
 			return auth.User{}, callback.Claims{}, errors.Join(err, fmt.Errorf("audit callback denial: %w", auditErr))
 		}
 		return auth.User{}, callback.Claims{}, err
 	}
-	if err := s.auditDecision(ctx, user.ID, expected, "allowed", "", claims.KeyID, capability, meta); err != nil {
+	reasonCode := ""
+	if replayCandidate {
+		reasonCode = "replay_candidate"
+	}
+	if err := s.auditDecision(ctx, user.ID, expected, "allowed", reasonCode, claims.KeyID, capability, meta); err != nil {
 		return auth.User{}, callback.Claims{}, fmt.Errorf("audit callback authorization: %w", err)
 	}
 	return user, claims, nil
