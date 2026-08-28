@@ -34,6 +34,7 @@ type MutationReport struct {
 	NonCriticalLived []MutationFinding `json:"noncritical_lived"`
 }
 
+func (r MutationReport) HasMutationEvidence() bool { return r.MutantsTotal > 0 }
 func (r MutationReport) HasCriticalBlockers() bool { return len(r.CriticalBlockers) > 0 }
 
 func EvaluateGremlins(r io.Reader) (MutationReport, error) {

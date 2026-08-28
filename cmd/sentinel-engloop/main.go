@@ -252,6 +252,9 @@ func runMutation(args []string, stdout, stderr io.Writer) error {
 			fmt.Fprintf(stdout, "BLOCKER %s %s:%d:%d %s\n", finding.Status, finding.File, finding.Line, finding.Column, finding.Type)
 		}
 	}
+	if !report.HasMutationEvidence() {
+		return exitError{code: 11, msg: "critical mutation evidence contains zero generated mutants"}
+	}
 	if report.HasCriticalBlockers() {
 		return exitError{code: 10, msg: "critical mutation evidence is not clean"}
 	}

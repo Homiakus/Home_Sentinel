@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,6 +40,45 @@ func TestRunActivePacketRejectsMissingDescriptor(t *testing.T) {
 	if !strings.Contains(err.Error(), "open active work packet") {
 		t.Fatalf("unexpected error: %v", err)
 	}
+}
+
+func TestRunMutationRejectsZeroMutantEvidence(t *testing.T) {
+	path := writeMutationFixture(t, `{"test_efficacy":0,"mutants_total":0,"files":[]}`)
+	var stdout, stderr bytes.Buffer
+	err := run([]string{"mutation", "--file", path}, &stdout, &stderr)
+	var exitErr exitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("zero-mutant report error=%v, want exitError", err)
+	}
+	if exitErr.code != 11 {
+		t.Fatalf("zero-mutant exit code=%d want 11; error=%v", exitErr.code, err)
+	}
+	if !strings.Contains(exitErr.msg, "zero generated mutants") {
+		t.Fatalf("zero-mutant error=%q", exitErr.msg)
+	}
+	if !strings.Contains(stdout.String(), "total=0") {
+		t.Fatalf("zero-mutant diagnostic missing total: %q", stdout.String())
+	}
+}
+
+func TestRunMutationAcceptsKilledCriticalEvidence(t *testing.T) {
+	path := writeMutationFixture(t, `{"test_efficacy":100,"mutants_total":1,"files":[{"file_name":"internal/engloop/mutation.go","mutations":[{"line":1,"column":1,"type":"CONDITIONALS_BOUNDARY","status":"KILLED"}]}]}`)
+	var stdout, stderr bytes.Buffer
+	if err := run([]string{"mutation", "--file", path}, &stdout, &stderr); err != nil {
+		t.Fatalf("killed mutation evidence rejected: %v stderr=%s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "total=1") || !strings.Contains(stdout.String(), "critical_blockers=0") {
+		t.Fatalf("unexpected killed mutation diagnostic: %q", stdout.String())
+	}
+}
+
+func writeMutationFixture(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "gremlins.json")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 func activePacketCLIFixture(t *testing.T) string {

@@ -24,6 +24,9 @@ func TestEvaluateGremlinsBlocksCriticalLivedAndNotCovered(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EvaluateGremlins() error=%v", err)
 	}
+	if !report.HasMutationEvidence() {
+		t.Fatal("nonzero Gremlins report lost mutation evidence")
+	}
 	if !report.HasCriticalBlockers() || len(report.CriticalBlockers) != 2 {
 		t.Fatalf("critical blockers=%v", report.CriticalBlockers)
 	}
@@ -38,7 +41,23 @@ func TestEvaluateGremlinsKilledCriticalIsClean(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EvaluateGremlins() error=%v", err)
 	}
+	if !report.HasMutationEvidence() {
+		t.Fatal("killed mutant must count as mutation evidence")
+	}
 	if report.HasCriticalBlockers() {
 		t.Fatalf("unexpected blockers=%v", report.CriticalBlockers)
+	}
+}
+
+func TestEvaluateGremlinsZeroMutantsHasNoEvidence(t *testing.T) {
+	report, err := EvaluateGremlins(strings.NewReader(`{"test_efficacy":0,"mutants_total":0,"files":[]}`))
+	if err != nil {
+		t.Fatalf("EvaluateGremlins() error=%v", err)
+	}
+	if report.HasMutationEvidence() {
+		t.Fatalf("zero-mutant report counted as evidence: %+v", report)
+	}
+	if report.HasCriticalBlockers() {
+		t.Fatalf("zero-mutant report should be rejected as missing evidence, not fabricated blockers: %+v", report.CriticalBlockers)
 	}
 }
