@@ -1,5 +1,5 @@
 {
-  "packet": "docs/engineering/work-packets/stage17-callback-runtime.json",
-  "mutation_base": "e6ffc4a8b3fdaae8ba33df82e0ff7a55dc957c36",
-  "max_commits": 64
+  "packet": "docs/engineering/work-packets/stage17-durable-notifier.json",
+  "mutation_base": "f353b674dd45790677aa21debb53e19b8596dd13",
+  "max_commits": 48
 }
