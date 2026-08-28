@@ -382,17 +382,17 @@ func applyRuntimeEnv(cfg *Config, lookup LookupEnv) error {
 		}
 	}
 	for key, target := range map[string]*time.Duration{
-		"SENTINEL_READ_TIMEOUT":          &cfg.Server.ReadTimeout,
-		"SENTINEL_WRITE_TIMEOUT":         &cfg.Server.WriteTimeout,
-		"SENTINEL_SHUTDOWN_GRACE":        &cfg.Server.ShutdownGrace,
-		"SENTINEL_DB_BUSY_TIMEOUT":       &cfg.Database.BusyTimeout,
-		"SENTINEL_SESSION_TTL":           &cfg.Security.SessionTTL,
-		"SENTINEL_CALLBACK_MAX_TTL":      &cfg.Security.Callbacks.MaxTTL,
-		"SENTINEL_CALLBACK_CLOCK_SKEW":   &cfg.Security.Callbacks.ClockSkew,
-		"SENTINEL_MQTT_KEEP_ALIVE":       &cfg.MQTT.KeepAlive,
-		"SENTINEL_MQTT_SESSION_EXPIRY":   &cfg.MQTT.SessionExpiry,
-		"SENTINEL_MQTT_CONNECT_TIMEOUT":  &cfg.MQTT.ConnectTimeout,
-		"SENTINEL_BACKUP_INTERVAL":       &cfg.Backup.Interval,
+		"SENTINEL_READ_TIMEOUT":         &cfg.Server.ReadTimeout,
+		"SENTINEL_WRITE_TIMEOUT":        &cfg.Server.WriteTimeout,
+		"SENTINEL_SHUTDOWN_GRACE":       &cfg.Server.ShutdownGrace,
+		"SENTINEL_DB_BUSY_TIMEOUT":      &cfg.Database.BusyTimeout,
+		"SENTINEL_SESSION_TTL":          &cfg.Security.SessionTTL,
+		"SENTINEL_CALLBACK_MAX_TTL":     &cfg.Security.Callbacks.MaxTTL,
+		"SENTINEL_CALLBACK_CLOCK_SKEW":  &cfg.Security.Callbacks.ClockSkew,
+		"SENTINEL_MQTT_KEEP_ALIVE":      &cfg.MQTT.KeepAlive,
+		"SENTINEL_MQTT_SESSION_EXPIRY":  &cfg.MQTT.SessionExpiry,
+		"SENTINEL_MQTT_CONNECT_TIMEOUT": &cfg.MQTT.ConnectTimeout,
+		"SENTINEL_BACKUP_INTERVAL":      &cfg.Backup.Interval,
 	} {
 		if err := durationEnv(key, target); err != nil {
 			return err
