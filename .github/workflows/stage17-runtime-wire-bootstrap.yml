@@ -1,0 +1,81 @@
+name: stage17-runtime-wire-bootstrap
+
+on:
+  push:
+    branches:
+      - stage17-incident-runtime-wiring
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: stage17-incident-runtime-wiring
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: .go-version
+          cache: true
+      - name: Apply exact integration patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          app = Path('internal/app/app.go')
+          text = app.read_text()
+
+          needle = '\tTelegram               *tgsvc.Service\n\tMetrics                *telemetry.Metrics\n'
+          replacement = '\tTelegram               *tgsvc.Service\n\tIncidentRuntime        *IncidentRuntime\n\tMetrics                *telemetry.Metrics\n'
+          if text.count(needle) != 1:
+              raise SystemExit('App field anchor mismatch')
+          text = text.replace(needle, replacement)
+
+          needle = '''\tif cfg.Telegram.Enabled {\n\t\ttokenBytes, resolveErr := a.Secrets.Resolve(cfg.Telegram.TokenRef)'''
+          if text.count(needle) != 1:
+              raise SystemExit('Telegram bootstrap anchor mismatch')
+
+          needle = '''\t\tif err := a.Telegram.Start(a.runCtx); err != nil {\n\t\t\t_ = a.Close()\n\t\t\treturn nil, fmt.Errorf("start Telegram service: %w", err)\n\t\t}\n\t}\n\ta.startWatchdog()'''
+          replacement = '''\t\tif err := a.Telegram.Start(a.runCtx); err != nil {\n\t\t\t_ = a.Close()\n\t\t\treturn nil, fmt.Errorf("start Telegram service: %w", err)\n\t\t}\n\t}\n\tif err := a.startIncidentRuntime(); err != nil {\n\t\t_ = a.Close()\n\t\treturn nil, err\n\t}\n\ta.startWatchdog()'''
+          if text.count(needle) != 1:
+              raise SystemExit('Incident runtime startup anchor mismatch')
+          text = text.replace(needle, replacement)
+
+          needle = '''\tif a.Watchdog != nil {\n\t\ta.Watchdog.Close()\n\t\ta.Watchdog = nil\n\t}\n\tif a.Incidents != nil {'''
+          replacement = '''\tif a.Watchdog != nil {\n\t\ta.Watchdog.Close()\n\t\ta.Watchdog = nil\n\t}\n\tif a.IncidentRuntime != nil {\n\t\tif err := a.IncidentRuntime.Close(); err != nil && first == nil {\n\t\t\tfirst = err\n\t\t}\n\t\ta.IncidentRuntime = nil\n\t}\n\tif a.Incidents != nil {'''
+          if text.count(needle) != 1:
+              raise SystemExit('Incident runtime shutdown anchor mismatch')
+          text = text.replace(needle, replacement)
+          app.write_text(text)
+
+          test = Path('internal/telegram/notifier_test.go')
+          text = test.read_text()
+          needle = '''\t// Give the second caller a deterministic opportunity to observe the durable\n\t// sending state before the first provider call completes.\n\ttime.Sleep(20 * time.Millisecond)\n\tclose(release)\n\tfirst := <-results\n\tsecond := <-results'''
+          replacement = '''\t// The first provider call is blocked, so the first result available here\n\t// must come from the duplicate caller observing durable sending state.\n\tvar second outcome\n\tselect {\n\tcase second = <-results:\n\tcase <-time.After(time.Second):\n\t\tt.Fatal("duplicate caller did not converge while provider call was fenced")\n\t}\n\tif second.err != nil || second.result.State != gateway.EffectAmbiguous {\n\t\tt.Fatalf("duplicate caller result=%+v err=%v", second.result, second.err)\n\t}\n\tclose(release)\n\tfirst := <-results'''
+          if text.count(needle) != 1:
+              raise SystemExit('Notifier concurrency anchor mismatch')
+          text = text.replace(needle, replacement)
+          test.write_text(text)
+      - name: Format
+        run: gofmt -w internal/app/app.go internal/app/incident_runtime.go internal/app/incident_runtime_test.go internal/telegram/notifier_test.go
+      - name: Target tests
+        run: go test ./internal/app ./internal/telegram ./internal/orchestration/incident -count=1
+      - name: Target race
+        run: go test -race ./internal/app ./internal/telegram ./internal/orchestration/incident -count=1
+      - name: Commit verified patch and remove bootstrap
+        run: |
+          set -euo pipefail
+          rm .github/workflows/stage17-runtime-wire-bootstrap.yml
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add internal/app/app.go internal/app/incident_runtime.go internal/app/incident_runtime_test.go internal/telegram/notifier_test.go .github/workflows/stage17-runtime-wire-bootstrap.yml
+          git commit -m "feat(stage17): wire production incident runtime"
+          git push origin HEAD:stage17-incident-runtime-wiring
