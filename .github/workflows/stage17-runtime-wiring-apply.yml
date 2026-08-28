@@ -1,0 +1,81 @@
+name: stage17-runtime-wiring-apply
+
+on:
+  push:
+    branches: [stage17-app-runtime-wiring]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stage17-runtime-wiring-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: stage17-app-runtime-wiring
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: .go-version
+          cache: true
+      - name: Apply exact lifecycle patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('internal/app/app.go')
+          text = path.read_text()
+
+          replacements = [
+              (
+                  '\t"github.com/Homiakus/Home_Sentinel/internal/locks"\n',
+                  '\t"github.com/Homiakus/Home_Sentinel/internal/locks"\n\torincident "github.com/Homiakus/Home_Sentinel/internal/orchestration/incident"\n',
+              ),
+              (
+                  '\tTelegram               *tgsvc.Service\n\tMetrics                *telemetry.Metrics\n',
+                  '\tTelegram               *tgsvc.Service\n\tIncidentRuntime        *orincident.Service\n\tIncidentCallbacks      *orincident.CallbackIngress\n\tMetrics                *telemetry.Metrics\n',
+              ),
+              (
+                  '\trunCtx                 context.Context\n\trunCancel              context.CancelFunc\n\tstarted                time.Time\n',
+                  '\trunCtx                 context.Context\n\trunCancel              context.CancelFunc\n\tincidentServeDone      chan error\n\tstarted                time.Time\n',
+              ),
+              (
+                  '\t}\n\ta.startWatchdog()\n\treturn a, nil\n}\n\nfunc (a *App) startWatchdog()',
+                  '\t}\n\tif err := a.startIncidentRuntime(); err != nil {\n\t\t_ = a.Close()\n\t\treturn nil, fmt.Errorf("start durable incident runtime: %w", err)\n\t}\n\ta.startWatchdog()\n\treturn a, nil\n}\n\nfunc (a *App) startWatchdog()',
+              ),
+              (
+                  '\tif a.Watchdog != nil {\n\t\ta.Watchdog.Close()\n\t\ta.Watchdog = nil\n\t}\n\tif a.Incidents != nil {',
+                  '\tif a.Watchdog != nil {\n\t\ta.Watchdog.Close()\n\t\ta.Watchdog = nil\n\t}\n\tif err := a.stopIncidentRuntime(); err != nil {\n\t\treturn err\n\t}\n\tif a.Incidents != nil {',
+              ),
+          ]
+
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'anchor count {count}, expected 1: {old!r}')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text)
+      - name: Format and verify targeted lifecycle
+        run: |
+          set -euo pipefail
+          gofmt -w internal/app/app.go internal/app/incident_runtime.go
+          go test ./internal/app ./internal/orchestration/incident ./internal/telegram -count=1
+          go test -race ./internal/app -count=1
+          git diff --check
+      - name: Commit verified patch and remove bootstrap
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm .github/workflows/stage17-runtime-wiring-apply.yml
+          git add internal/app/app.go internal/app/incident_runtime.go .github/workflows/stage17-runtime-wiring-apply.yml
+          git commit -m 'feat(stage17): wire durable incident runtime into App lifecycle'
+          git push origin HEAD:stage17-app-runtime-wiring
