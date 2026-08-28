@@ -17,7 +17,7 @@ var ErrCallbackDecisionConflict = errors.New("incident: callback decision confli
 
 const (
 	callbackDecisionReceiptVersion = 1
-	callbackHumanPayloadKey         = "human:" + NodeHumanDecision + ":payload"
+	callbackHumanPayloadKey        = "human:" + NodeHumanDecision + ":payload"
 )
 
 type callbackDecisionReceipt struct {
