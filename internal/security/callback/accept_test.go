@@ -121,6 +121,21 @@ func TestAcceptorRejectsTamperingBeforeReplayAdmission(t *testing.T) {
 	}
 }
 
+// This clock is intentionally far in the past. If Accept stops honoring its
+// injected replay clock and silently falls back to wall time, the token is
+// expired today and this test fails. That makes clock-source mutation visible.
+func TestAcceptorHonorsInjectedReplayClock(t *testing.T) {
+	now := time.Unix(1_600_000_000, 0).UTC()
+	ring, acceptor := newTestAcceptor(t, now)
+	token, err := ring.Sign(boundClaims(now, "nonce-clock-source"))
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	if _, err := acceptor.Accept(token, boundExpectation()); err != nil {
+		t.Fatalf("injected replay clock was not honored: %v", err)
+	}
+}
+
 func TestAcceptorConcurrentReplayHasExactlyOneWinner(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
 	ring, acceptor := newTestAcceptor(t, now)
