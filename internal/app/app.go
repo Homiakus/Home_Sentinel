@@ -59,6 +59,7 @@ type App struct {
 	Health                 *health.Registry
 	Cameras                *cameras.Service
 	Secrets                secrets.Resolver
+	CallbackSecurity       CallbackSecurity
 	Frigate                *frigateint.Service
 	MQTT                   *mqttint.Client
 	HomeAssistant          *haint.Service
@@ -75,7 +76,6 @@ type App struct {
 	Backup                 *backup.Manager
 	BackupScheduler        *backup.Scheduler
 	BackupRestic           *resticint.Client
-	CallbackSecurity       CallbackSecurity
 	runCtx                 context.Context
 	runCancel              context.CancelFunc
 	started                time.Time
@@ -126,6 +126,11 @@ func Open(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error
 	}
 	secretRoot := filepath.Join(filepath.Dir(cfg.Database.Path), "secrets")
 	a.Secrets = secrets.Resolver{File: secrets.FileProvider{Root: secretRoot}}
+	a.CallbackSecurity, err = openCallbackSecurity(cfg.Security.Callbacks, a.Secrets)
+	if err != nil {
+		_ = a.Close()
+		return nil, err
+	}
 	secretStore := secrets.FileStore{Root: secretRoot}
 	a.Cameras = &cameras.Service{Store: repository.NewStore[cameras.Camera](db, repository.KindCamera), Secrets: a.Secrets, Network: guard}
 	a.HomeAssistantSetup = &setupsvc.HomeAssistantSetup{Store: repository.NewStore[setupsvc.HomeAssistantDesired](db, repository.KindIntegration), Secrets: secretStore}
@@ -172,92 +177,110 @@ func Open(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error
 			KeepAlive:      cfg.MQTT.KeepAlive,
 			SessionExpiry:  cfg.MQTT.SessionExpiry,
 			ConnectTimeout: cfg.MQTT.ConnectTimeout,
-			OnMessage:      a.ingestMQTT,
+			Subscriptions: []mqttint.Subscription{
+				{Topic: mqttint.FrigateReviews, QoS: 1},
+				{Topic: mqttint.FrigateTrackedObjectUpdate, QoS: 1},
+				{Topic: mqttint.HomeAssistantStatus, QoS: 1},
+				{Topic: "sentinel/intercom/+/state/+", QoS: 1},
+				{Topic: "sentinel/intercom/+/event/+", QoS: 1},
+			},
+			Handler: a.ingestMQTT,
+			OnConnectionStateChange: func(up bool) {
+				if up {
+					a.Health.Set("mqtt", health.Healthy, "", "")
+					go a.publishHADiscovery(a.runCtx)
+				} else {
+					a.Health.Set("mqtt", health.Degraded, "MQTT_DISCONNECTED", "broker connection unavailable")
+				}
+			},
 		})
+		for i := range password {
+			password[i] = 0
+		}
 		if mqttErr != nil {
 			_ = a.Close()
-			return nil, mqttErr
+			return nil, fmt.Errorf("initialize MQTT: %w", mqttErr)
 		}
 		a.MQTT = client
-		a.Health.Set("mqtt", health.Starting, "NOT_VERIFIED", "MQTT configured; readiness not yet verified")
+		if a.Intercom != nil {
+			a.Intercom.MQTT = client
+		}
 	}
 	if cfg.HomeAssistant.Enabled {
-		token, resolveErr := a.Secrets.Resolve(cfg.HomeAssistant.TokenRef)
-		if resolveErr != nil {
-			_ = a.Close()
-			return nil, fmt.Errorf("resolve Home Assistant token: %w", resolveErr)
+		if err := a.StartHomeAssistant(a.runCtx, cfg.HomeAssistant.URL, cfg.HomeAssistant.TokenRef); err != nil {
+			a.Health.Set("home_assistant", health.Degraded, "HA_UNAVAILABLE", "initial connection failed")
+			a.Log.WarnContext(ctx, "Home Assistant unavailable; continuing in degraded mode", "error", err)
+		} else {
+			a.Health.Set("home_assistant", health.Healthy, "", "")
 		}
-		client, clientErr := haint.NewClient(haint.ClientOptions{BaseURL: cfg.HomeAssistant.URL, BearerToken: string(token)})
-		if clientErr != nil {
-			_ = a.Close()
-			return nil, clientErr
-		}
-		a.HomeAssistant = &haint.Service{Client: client, State: repository.NewStore[haint.AppliedState](db, repository.KindIntegration), Locks: a.Locks}
-		a.Health.Set("home_assistant", health.Starting, "NOT_VERIFIED", "Home Assistant configured; readiness not yet verified")
 	}
 	if cfg.AI.Enabled {
-		client, clientErr := ollama.NewClient(ollama.ClientOptions{BaseURL: cfg.AI.URL, Model: cfg.AI.Model})
-		if clientErr != nil {
+		provider, err := ollama.New(ollama.Options{BaseURL: cfg.AI.URL, Model: cfg.AI.Model})
+		if err != nil {
 			_ = a.Close()
-			return nil, clientErr
+			return nil, fmt.Errorf("initialize Ollama: %w", err)
 		}
-		a.AI = ai.NewService(client, a.AIPolicies, a.Events)
-		a.Health.Set("ai", health.Starting, "NOT_VERIFIED", "AI configured; readiness not yet verified")
+		profile := ai.Recommend(a.Hardware)
+		if profile.MaxParallel < 1 {
+			profile.Level = "FORCED"
+			profile.MaxParallel = 1
+			profile.MaxFrames = 2
+			profile.Warnings = append(profile.Warnings, "AI was explicitly enabled despite conservative hardware recommendation")
+		}
+		a.AI, err = ai.NewService(a.runCtx, provider, true, profile, 32)
+		if err != nil {
+			_ = a.Close()
+			return nil, fmt.Errorf("initialize AI service: %w", err)
+		}
+		a.Health.Set("ai", health.Starting, "NOT_VERIFIED", "AI runtime configured; model health not yet verified")
 	}
 	if cfg.Backup.Enabled {
-		manager, managerErr := backup.NewManager(db, backup.Options{
-			DataDir:     filepath.Dir(cfg.Database.Path),
-			ConfigFiles: append([]string(nil), cfg.Backup.ConfigFiles...),
-		})
-		if managerErr != nil {
+		password, resolveErr := a.Secrets.Resolve(cfg.Backup.PasswordRef)
+		if resolveErr != nil {
 			_ = a.Close()
-			return nil, managerErr
+			return nil, fmt.Errorf("resolve backup password: %w", resolveErr)
 		}
-		a.Backup = manager
-		if cfg.Backup.Repository != "" && cfg.Backup.PasswordRef != "" {
-			secret, resolveErr := a.Secrets.Resolve(cfg.Backup.PasswordRef)
-			if resolveErr != nil {
-				_ = a.Close()
-				return nil, fmt.Errorf("resolve restic password: %w", resolveErr)
-			}
-			restic, resticErr := resticint.New(resticint.Options{
-				Repository: cfg.Backup.Repository,
-				Password:   secret,
-			})
-			for i := range secret {
-				secret[i] = 0
-			}
-			if resticErr != nil {
-				_ = a.Close()
-				return nil, resticErr
-			}
-			a.BackupRestic = restic
-			a.Health.Set("backup_remote", health.Starting, "NOT_VERIFIED", "restic configured; restore has not yet been verified")
+		client := &resticint.Client{Repository: cfg.Backup.Repository, Password: append([]byte(nil), password...)}
+		for i := range password {
+			password[i] = 0
 		}
-		a.BackupScheduler = backup.NewScheduler(manager, cfg.Backup.Interval, backup.RetentionPolicy{KeepHourly: cfg.Backup.KeepHourly, KeepDaily: cfg.Backup.KeepDaily, KeepWeekly: cfg.Backup.KeepWeekly, KeepMonthly: cfg.Backup.KeepMonthly})
-		a.BackupScheduler.Start(a.runCtx)
+		configFiles := append([]string(nil), cfg.Backup.ConfigFiles...)
+		if source := strings.TrimSpace(os.Getenv("SENTINEL_CONFIG")); source != "" {
+			configFiles = append(configFiles, source)
+		}
+		excluded := managedFileSecretNames(cfg.Backup.PasswordRef)
+		a.BackupRestic = client
+		a.Backup = &backup.Manager{DB: db, Restic: client, Jobs: repository.NewStore[backup.JobRecord](db, repository.KindBackupJob), ConfigFiles: dedupeStrings(configFiles), SecretRoot: secretRoot, ExcludedSecretNames: excluded, OnResult: func(operation string, opErr error) {
+			if opErr != nil {
+				a.Health.Set("backup", health.Degraded, "BACKUP_"+strings.ToUpper(operation)+"_FAILED", "backup operation failed")
+				return
+			}
+			a.Health.Set("backup", health.Healthy, "", "")
+		}}
+		a.BackupScheduler = &backup.Scheduler{Manager: a.Backup, Schedule: backup.Schedule{Interval: cfg.Backup.Interval}}
+		a.Health.Set("backup", health.Starting, "NOT_VERIFIED", "backup repository configured; integrity not yet verified")
+		if err := a.BackupScheduler.Start(a.runCtx); err != nil {
+			_ = a.Close()
+			return nil, fmt.Errorf("start backup scheduler: %w", err)
+		}
 	}
-	callbackSecurity, err := openCallbackSecurity(a.Secrets, cfg.Security.Callbacks)
-	if err != nil {
-		_ = a.Close()
-		return nil, fmt.Errorf("initialize callback security: %w", err)
-	}
-	a.CallbackSecurity = callbackSecurity
 	if cfg.Telegram.Enabled {
-		if cfg.Telegram.TokenRef == "" {
-			_ = a.Close()
-			return nil, errors.New("Telegram token reference required")
-		}
-		token, resolveErr := a.Secrets.Resolve(cfg.Telegram.TokenRef)
+		tokenBytes, resolveErr := a.Secrets.Resolve(cfg.Telegram.TokenRef)
 		if resolveErr != nil {
 			_ = a.Close()
 			return nil, fmt.Errorf("resolve Telegram token: %w", resolveErr)
 		}
-		client := tgapi.NewClient(string(token))
-		for i := range token {
-			token[i] = 0
+		token := string(tokenBytes)
+		for i := range tokenBytes {
+			tokenBytes[i] = 0
+		}
+		client, clientErr := tgapi.New(tgapi.Options{Token: token})
+		if clientErr != nil {
+			_ = a.Close()
+			return nil, fmt.Errorf("initialize Telegram client: %w", clientErr)
 		}
 		a.Telegram = &tgsvc.Service{Client: client, Pairings: tgsvc.PairingStore{DB: db}, Actions: tgsvc.ActionStore{DB: db}, Users: a.Users, Intercom: a.Intercom, Events: a.Events}
+		a.Health.Set("telegram", health.Starting, "NOT_VERIFIED", "Telegram worker configured")
 		if err := a.Telegram.Start(a.runCtx); err != nil {
 			_ = a.Close()
 			return nil, fmt.Errorf("start Telegram service: %w", err)
@@ -272,12 +295,38 @@ func Open(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error
 }
 
 func (a *App) startWatchdog() {
-	if a == nil || a.Health == nil || a.runCtx == nil || a.Config.Watchdog.Interval <= 0 {
-		return
+	checks := []watchdog.Check{{Name: "database", Base: 15 * time.Second, MaxBackoff: time.Minute, Timeout: 2 * time.Second, ReasonCode: "DATABASE_UNAVAILABLE", Probe: func(ctx context.Context) error { return a.DB.PingContext(ctx) }}}
+	if a.MQTT != nil {
+		checks = append(checks, watchdog.Check{Name: "mqtt", Base: 10 * time.Second, MaxBackoff: time.Minute, Timeout: time.Second, ReasonCode: "MQTT_DISCONNECTED", Probe: func(context.Context) error {
+			if !a.MQTT.Ready() {
+				return errors.New("MQTT disconnected")
+			}
+			return nil
+		}})
 	}
-	checks := []watchdog.Check{
-		{Name: "database", Timeout: 2 * time.Second, Run: func(ctx context.Context) error { return a.DB.PingContext(ctx) }},
-		{Name: "sentinel", Timeout: time.Second, Run: func(context.Context) error { return nil }},
+	if a.HomeAssistant != nil {
+		checks = append(checks, watchdog.Check{Name: "home_assistant", Base: 30 * time.Second, MaxBackoff: 3 * time.Minute, Timeout: 5 * time.Second, ReasonCode: "HA_UNAVAILABLE", Probe: func(ctx context.Context) error {
+			st := a.HomeAssistant.Status(ctx)
+			if !st.Reachable {
+				return errors.New("Home Assistant unreachable")
+			}
+			return nil
+		}})
+	}
+	if a.Frigate != nil && a.Frigate.Client != nil {
+		checks = append(checks, watchdog.Check{Name: "frigate", Base: 30 * time.Second, MaxBackoff: 3 * time.Minute, Timeout: 5 * time.Second, ReasonCode: "FRIGATE_UNAVAILABLE", Probe: func(ctx context.Context) error { _, err := a.Frigate.Client.Version(ctx); return err }})
+	}
+	if a.AI != nil && a.AI.Provider != nil {
+		checks = append(checks, watchdog.Check{Name: "ai", Base: time.Minute, MaxBackoff: 5 * time.Minute, Timeout: 10 * time.Second, ReasonCode: "AI_UNAVAILABLE", Probe: func(ctx context.Context) error {
+			h := a.AI.Provider.Health(ctx)
+			if !h.Reachable {
+				return errors.New("AI provider unreachable")
+			}
+			return nil
+		}})
+	}
+	if a.Telegram != nil && a.Telegram.Client != nil {
+		checks = append(checks, watchdog.Check{Name: "telegram", Base: time.Minute, MaxBackoff: 5 * time.Minute, Timeout: 5 * time.Second, ReasonCode: "TELEGRAM_UNAVAILABLE", Probe: func(ctx context.Context) error { _, err := a.Telegram.Client.GetMe(ctx); return err }})
 	}
 	m := &watchdog.Manager{Registry: a.Health, Checks: checks}
 	if err := m.Start(a.runCtx); err != nil {
@@ -399,29 +448,143 @@ func (a *App) StartHomeAssistant(ctx context.Context, rawURL string, tokenRef se
 	}
 	secret, err := a.Secrets.Resolve(tokenRef)
 	if err != nil {
+		return fmt.Errorf("resolve Home Assistant token: %w", err)
+	}
+	token := string(secret)
+	for i := range secret {
+		secret[i] = 0
+	}
+	rest, err := haint.NewRESTClient(haint.RESTOptions{BaseURL: rawURL, Token: token})
+	if err != nil {
 		return err
 	}
-	client, err := haint.NewClient(haint.ClientOptions{BaseURL: rawURL, BearerToken: string(secret)})
+	var stream *haint.WSStream
+	stream, err = haint.NewWSStream(a.runCtx, haint.WSOptions{BaseURL: rawURL, Token: token, EventTypes: []string{"state_changed"}})
+	if err != nil && !errors.Is(err, haint.ErrWebSocketRuntimeUnsupported) {
+		return err
+	}
+	discovery := haint.DiscoveryPublisher{Prefix: "homeassistant"}
+	if a.MQTT != nil {
+		discovery.MQTT = a.MQTT
+	}
+	service := &haint.Service{REST: rest, Stream: stream, Discovery: discovery}
+	service.Actions, err = haint.NewActionBridge(rest, nil)
 	if err != nil {
+		_ = service.Close()
 		return err
 	}
 	if a.HomeAssistant != nil {
 		_ = a.HomeAssistant.Close()
 	}
-	a.HomeAssistant = &haint.Service{Client: client, State: repository.NewStore[haint.AppliedState](a.DB, repository.KindIntegration), Locks: a.Locks}
+	a.HomeAssistant = service
+	if a.MQTT != nil && a.MQTT.Ready() {
+		go a.publishHADiscovery(a.runCtx)
+	}
 	return nil
 }
 
-func (a *App) WriteConfigRevision(ctx context.Context, actor, requestID, correlationID string, cfg any) (repository.Revision, error) {
-	b, err := jsonMarshalStable(cfg)
-	if err != nil {
-		return repository.Revision{}, err
+func (a *App) ConfigureHomeAssistant(ctx context.Context, rawURL, token string) (setupsvc.HomeAssistantDesired, setupsvc.HomeAssistantDiagnostic, error) {
+	if a.HomeAssistantSetup == nil {
+		return setupsvc.HomeAssistantDesired{}, setupsvc.HomeAssistantDiagnostic{}, errors.New("Home Assistant setup unavailable")
 	}
-	return a.Revisions.Apply(ctx, "config", "sentinel", actor, requestID, correlationID, b, func(context.Context) error { return nil })
+	desired, diag, err := a.HomeAssistantSetup.Configure(ctx, rawURL, token)
+	if err != nil || !diag.OK {
+		return desired, diag, err
+	}
+	if err := a.StartHomeAssistant(ctx, desired.URL, desired.TokenRef); err != nil {
+		return desired, diag, fmt.Errorf("activate Home Assistant: %w", err)
+	}
+	a.Config.HomeAssistant = config.HomeAssistantConfig{Enabled: true, URL: desired.URL, TokenRef: desired.TokenRef}
+	return desired, diag, nil
 }
 
-func (a *App) Version() buildinfo.Info { return buildinfo.Current() }
+func (a *App) publishHADiscovery(ctx context.Context) {
+	if a.HomeAssistant == nil || a.HomeAssistant.Discovery.MQTT == nil || ctx == nil || ctx.Err() != nil {
+		return
+	}
+	if err := a.HomeAssistant.PublishSystemDiscovery(ctx, buildinfo.Version); err != nil {
+		a.Log.WarnContext(ctx, "publish Home Assistant system discovery", "error", err)
+		return
+	}
+	_ = a.HomeAssistant.Discovery.PublishAvailability(ctx, "sentinel/system/availability", true)
+	aiStatus := "DISABLED"
+	if a.Config.AI.Enabled {
+		aiStatus = "CONFIGURED"
+	}
+	backupStatus := "DISABLED"
+	if a.Config.Backup.Enabled {
+		backupStatus = "CONFIGURED"
+	}
+	_ = a.HomeAssistant.Discovery.PublishSystemState(ctx, haint.SystemState{Health: "HEALTHY", AIStatus: aiStatus, BackupStatus: backupStatus})
+	if a.Cameras == nil {
+		return
+	}
+	cams, err := a.Cameras.List(ctx, 1000)
+	if err != nil {
+		a.Log.WarnContext(ctx, "list cameras for Home Assistant discovery", "error", err)
+		return
+	}
+	for _, cam := range cams {
+		device, err := haint.SentinelCameraDevice(cam.ID, cam.Name, buildinfo.Version)
+		if err != nil {
+			continue
+		}
+		if err := a.HomeAssistant.Discovery.PublishDevice(ctx, "camera_"+cam.ID, device); err != nil {
+			a.Log.WarnContext(ctx, "publish Home Assistant camera discovery", "camera_id", cam.ID, "error", err)
+			continue
+		}
+		online := strings.EqualFold(cam.Observed.Status, "HEALTHY")
+		_ = a.HomeAssistant.Discovery.PublishCameraConnectivity(ctx, cam.ID, online)
+	}
+	if a.Intercom != nil {
+		devices, err := a.Intercom.List(ctx, 1000)
+		if err == nil {
+			for _, dev := range devices {
+				discovered, err := haint.SentinelIntercomDevice(dev.ID, dev.Name, buildinfo.Version)
+				if err != nil {
+					continue
+				}
+				if err := a.HomeAssistant.Discovery.PublishDevice(ctx, "intercom_"+dev.ID, discovered); err != nil {
+					a.Log.WarnContext(ctx, "publish Home Assistant intercom discovery", "intercom_id", dev.ID, "error", err)
+				}
+			}
+		}
+	}
+}
 
-func jsonMarshalStable(v any) ([]byte, error) {
-	return json.Marshal(v)
+func (a *App) RequireDB() (*sql.DB, error) {
+	if a.DB == nil {
+		return nil, errors.New("application database is not initialized")
+	}
+	return a.DB, nil
+}
+
+func managedFileSecretNames(ref secrets.Ref) []string {
+	const prefix = "secret://file/"
+	raw := ref.String()
+	if !strings.HasPrefix(raw, prefix) {
+		return nil
+	}
+	name := strings.TrimPrefix(raw, prefix)
+	if name == "" || strings.Contains(name, "/") {
+		return nil
+	}
+	return []string{name}
+}
+
+func dedupeStrings(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return out
 }
