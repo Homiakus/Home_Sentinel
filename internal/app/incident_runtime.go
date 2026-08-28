@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Homiakus/Home_Sentinel/internal/health"
 	orincident "github.com/Homiakus/Home_Sentinel/internal/orchestration/incident"
 	tgsvc "github.com/Homiakus/Home_Sentinel/internal/telegram"
 )
@@ -51,7 +52,7 @@ func (a *App) startIncidentRuntime() error {
 		}
 	}
 	a.incidentServeDone = make(chan error, 1)
-	a.Health.Set("incident_runtime", "STARTING", "", "")
+	a.Health.Set("incident_runtime", health.Starting, "", "")
 	go a.serveIncidentRuntime(runtime, a.incidentServeDone)
 	return nil
 }
@@ -62,7 +63,7 @@ func (a *App) serveIncidentRuntime(runtime *orincident.Service, done chan<- erro
 		if err == nil {
 			err = errors.New("incident runtime: serve loop stopped unexpectedly")
 		}
-		a.Health.Set("incident_runtime", "DEGRADED", "INCIDENT_RUNTIME_STOPPED", "durable incident runtime stopped unexpectedly")
+		a.Health.Set("incident_runtime", health.Degraded, "INCIDENT_RUNTIME_STOPPED", "durable incident runtime stopped unexpectedly")
 		if a.Log != nil {
 			a.Log.Error("durable incident runtime stopped", "error", err)
 		}
