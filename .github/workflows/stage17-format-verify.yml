@@ -1,0 +1,49 @@
+name: stage17-format-verify
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/stage17-format-verify.yml
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .go-version
+          cache: true
+
+      - name: Format and verify Stage 17 runtime slice
+        shell: bash
+        run: |
+          set -euo pipefail
+          gofmt -w internal/config/runtime_load.go internal/config/runtime_callbacks.go internal/config/runtime_callbacks_test.go internal/config/runtime_callbacks_limits_test.go internal/config/runtime_callback_load_test.go
+          gofmt -w internal/security/callback/runtime.go internal/security/callback/runtime_test.go
+          gofmt -w internal/app/callback_security.go internal/app/callback_security_test.go
+          gofmt -w internal/authz/rbac.go internal/authz/rbac_test.go
+          gofmt -w internal/orchestration/incident/callback_ingress.go internal/orchestration/incident/callback_ingress_test.go internal/orchestration/incident/callback_ingress_negative_test.go internal/orchestration/incident/callback_ingress_reason_test.go internal/orchestration/incident/callback_durable_integration_test.go
+          go test ./internal/config ./internal/security/callback ./internal/authz ./internal/orchestration/incident ./internal/app
+          go test -race ./internal/security/callback ./internal/orchestration/incident ./internal/app
+
+      - name: Commit verified formatting and remove bootstrap
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/stage17-format-verify.yml
+          git add internal/config internal/security/callback internal/app internal/authz internal/orchestration/incident
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "test(stage17): format and verify callback runtime slice"
+          git push origin HEAD:main
