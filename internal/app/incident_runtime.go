@@ -189,26 +189,31 @@ func (r *IncidentRuntime) Close() error {
 }
 
 func validateIncidentRuntimeDependencies(a *App) error {
-	switch {
-	case a.DB == nil:
+	if a.DB == nil {
 		return errors.New("application: incident runtime database unavailable")
-	case a.Users == nil:
-		return errors.New("application: incident runtime user store unavailable")
-	case a.Audit == nil:
-		return errors.New("application: incident runtime audit store unavailable")
-	case a.Telegram == nil:
-		return errors.New("application: incident runtime Telegram service unavailable")
-	case a.Telegram.Client == nil:
-		return errors.New("application: incident runtime Telegram client unavailable")
-	case a.runCtx == nil:
-		return errors.New("application: incident runtime lifecycle context unavailable")
-	case a.Health == nil:
-		return errors.New("application: incident runtime health registry unavailable")
-	case a.Log == nil:
-		return errors.New("application: incident runtime logger unavailable")
-	default:
-		return nil
 	}
+	if a.Users == nil {
+		return errors.New("application: incident runtime user store unavailable")
+	}
+	if a.Audit == nil {
+		return errors.New("application: incident runtime audit store unavailable")
+	}
+	if a.Telegram == nil {
+		return errors.New("application: incident runtime Telegram service unavailable")
+	}
+	if a.Telegram.Client == nil {
+		return errors.New("application: incident runtime Telegram client unavailable")
+	}
+	if a.runCtx == nil {
+		return errors.New("application: incident runtime lifecycle context unavailable")
+	}
+	if a.Health == nil {
+		return errors.New("application: incident runtime health registry unavailable")
+	}
+	if a.Log == nil {
+		return errors.New("application: incident runtime logger unavailable")
+	}
+	return nil
 }
 
 // startIncidentRuntime wires the currently supported production notifier.
