@@ -1,0 +1,53 @@
+{
+  "plan_item": "T-021",
+  "intent": "Retain immutable incident v1/v2 execution bundles so persisted executions resume after upgrade with their exact plan, handler semantics and external signal bindings while new executions start on active v2.",
+  "status_before": "OPEN",
+  "risk_class": "CRITICAL",
+  "invariants": [
+    "Persisted non-terminal executions are dispatched only to the execution bundle matching their PlanDigest.",
+    "An execution bundle pins plan graph, version-specific handler semantics and external signal bindings together.",
+    "Unknown non-terminal persisted bundle identity fails closed rather than being silently skipped.",
+    "New incident executions start only on the active v2 bundle.",
+    "Historical v1 state is never silently migrated or reinterpreted as v2.",
+    "External notifications remain idempotent across restart and version routing."
+  ],
+  "contracts": [
+    "historical v1 plan compiles with stable v1 identity and distinct digest from v2",
+    "v1 Registry retains historical risk and archive semantics",
+    "bundle metadata resolves owner-response target by persisted PlanDigest",
+    "Axiom Host is used for multi-plan routing over the existing durable Store",
+    "service operations load persisted execution identity before selecting engine/bindings",
+    "startup or qualification rejects non-terminal executions whose digest has no registered bundle"
+  ],
+  "code_surfaces": [
+    "internal/orchestration/incident/plan.go",
+    "internal/orchestration/incident/handlers.go",
+    "internal/orchestration/incident/service.go",
+    "internal/orchestration/incident/plan_test.go",
+    "internal/orchestration/incident/pebble_test.go",
+    "internal/orchestration/incident/*legacy*",
+    "internal/orchestration/incident/*bundle*"
+  ],
+  "required_gates": [
+    "static",
+    "unit",
+    "property",
+    "race",
+    "contract",
+    "fault",
+    "mutation-critical",
+    "replay",
+    "security"
+  ],
+  "acceptance_evidence": [
+    "characterization tests preserve historical v1 risk and archive behavior",
+    "v1 and v2 bundle identities are deterministic and distinct",
+    "memory tests route v1 and v2 executions by persisted digest",
+    "Pebble upgrade test resumes a waiting v1 execution after reopen with v2 active",
+    "v1 owner response uses the v1 waiting-node binding and does not duplicate notification",
+    "new execution after reopen is v2",
+    "unknown non-terminal persisted digest is rejected fail-closed",
+    "ci/race/security pass",
+    "Gremlins produces non-empty orchestration evidence with no lived/not-covered critical blockers"
+  ]
+}
