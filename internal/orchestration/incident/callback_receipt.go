@@ -15,10 +15,7 @@ import (
 
 var ErrCallbackDecisionConflict = errors.New("incident: callback decision conflicts with durable receipt")
 
-const (
-	callbackDecisionReceiptVersion = 1
-	callbackHumanPayloadKey        = "human:" + NodeHumanDecision + ":payload"
-)
+const callbackDecisionReceiptVersion = 1
 
 type callbackDecisionReceipt struct {
 	Version  int                     `json:"version"`
@@ -105,18 +102,8 @@ func (s *Service) ResolveOwnerCallbackDecision(
 		// A concurrent delivery may have won between the preflight Get and the
 		// durable mutation. Re-read the receipt and converge on that result.
 		loaded, loadErr := s.Get(ctx, executionID)
-		if loadErr != nil {
-			return nil, errors.Join(err, loadErr)
-		}
-		receipt, ok, receiptErr := callbackReceiptFromExecution(loaded)
-		if receiptErr != nil {
-			return nil, errors.Join(err, receiptErr)
-		}
-		if !ok || receipt.EventID != eventID {
-			return nil, err
-		}
-		if !sameCallbackDecision(receipt, envelope.Receipt) {
-			return nil, callbackDecisionConflict(eventID)
+		if reconcileErr := reconcileStaleCallbackDecision(loaded, loadErr, eventID, envelope.Receipt, err); reconcileErr != nil {
+			return nil, reconcileErr
 		}
 		return s.Drive(ctx, executionID)
 	}
@@ -154,11 +141,15 @@ func newCallbackDecisionEnvelope(
 	}, nil
 }
 
+func callbackHumanPayloadKey() string {
+	return "human:" + NodeHumanDecision + ":payload"
+}
+
 func callbackReceiptFromExecution(execution *adgo.Execution) (callbackDecisionReceipt, bool, error) {
 	if execution == nil || execution.Data == nil {
 		return callbackDecisionReceipt{}, false, nil
 	}
-	raw, ok := execution.Data[callbackHumanPayloadKey]
+	raw, ok := execution.Data[callbackHumanPayloadKey()]
 	if !ok || len(raw) == 0 {
 		return callbackDecisionReceipt{}, false, nil
 	}
@@ -184,6 +175,29 @@ func callbackReceiptFromExecution(execution *adgo.Execution) (callbackDecisionRe
 		return callbackDecisionReceipt{}, false, errors.New("incident: durable callback receipt is invalid")
 	}
 	return receipt, true, nil
+}
+
+func reconcileStaleCallbackDecision(
+	loaded *adgo.Execution,
+	loadErr error,
+	eventID string,
+	expected callbackDecisionReceipt,
+	staleErr error,
+) error {
+	if loadErr != nil {
+		return errors.Join(staleErr, loadErr)
+	}
+	receipt, ok, receiptErr := callbackReceiptFromExecution(loaded)
+	if receiptErr != nil {
+		return errors.Join(staleErr, receiptErr)
+	}
+	if !ok || receipt.EventID != eventID {
+		return staleErr
+	}
+	if !sameCallbackDecision(receipt, expected) {
+		return callbackDecisionConflict(eventID)
+	}
+	return nil
 }
 
 func sameCallbackDecision(left, right callbackDecisionReceipt) bool {
