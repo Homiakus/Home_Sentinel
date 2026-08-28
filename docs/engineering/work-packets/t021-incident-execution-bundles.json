@@ -6,6 +6,8 @@
   "invariants": [
     "Persisted non-terminal executions are dispatched only to the execution bundle matching their PlanDigest.",
     "An execution bundle pins plan graph, version-specific handler semantics and external signal bindings together.",
+    "Cryptographic callback verification uses the node binding resolved from the persisted execution bundle, never an unconditional current-plan constant.",
+    "Read-model Explain and Diagnostics use the plan/engine matching the persisted execution bundle.",
     "Unknown non-terminal persisted bundle identity fails closed rather than being silently skipped.",
     "New incident executions start only on the active v2 bundle.",
     "Historical v1 state is never silently migrated or reinterpreted as v2.",
@@ -15,6 +17,9 @@
     "historical v1 plan compiles with stable v1 identity and distinct digest from v2",
     "v1 Registry retains historical risk and archive semantics",
     "bundle metadata resolves owner-response target by persisted PlanDigest",
+    "CallbackIngress asks a version-aware workflow resolver for the expected node before callback token verification when that capability is available",
+    "callback human-decision receipt mutation selects the engine matching the persisted execution",
+    "View remains safe for stored state while Explain and Diagnostics use the matching bundle plan/engine",
     "Axiom Host is used for multi-plan routing over the existing durable Store",
     "service operations load persisted execution identity before selecting engine/bindings",
     "startup or qualification rejects non-terminal executions whose digest has no registered bundle"
@@ -23,8 +28,12 @@
     "internal/orchestration/incident/plan.go",
     "internal/orchestration/incident/handlers.go",
     "internal/orchestration/incident/service.go",
+    "internal/orchestration/incident/readmodel.go",
+    "internal/orchestration/incident/callback_ingress.go",
+    "internal/orchestration/incident/callback_receipt.go",
     "internal/orchestration/incident/plan_test.go",
     "internal/orchestration/incident/pebble_test.go",
+    "internal/orchestration/incident/callback_ingress_test.go",
     "internal/orchestration/incident/*legacy*",
     "internal/orchestration/incident/*bundle*"
   ],
@@ -43,10 +52,12 @@
     "characterization tests preserve historical v1 risk and archive behavior",
     "v1 and v2 bundle identities are deterministic and distinct",
     "memory tests route v1 and v2 executions by persisted digest",
+    "CallbackIngress verifies an owner-response callback against the v1 node binding for a persisted v1 execution",
     "Pebble upgrade test resumes a waiting v1 execution after reopen with v2 active",
     "v1 owner response uses the v1 waiting-node binding and does not duplicate notification",
     "new execution after reopen is v2",
     "unknown non-terminal persisted digest is rejected fail-closed",
+    "Explain and Diagnostics do not reinterpret a v1 execution through the v2 plan",
     "ci/race/security pass",
     "Gremlins produces non-empty orchestration evidence with no lived/not-covered critical blockers"
   ]
