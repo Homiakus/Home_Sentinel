@@ -289,6 +289,11 @@ func isCriticalSurface(p string) bool {
 		"internal/scenario/compiler/",
 		"internal/scenario/catalog/",
 		"internal/workflow/physical/",
+		// Durable notifiers are external side-effect gateways even though the
+		// concrete adapter lives with its integration-facing service package.
+		// Missing this prefix would let a CRITICAL work packet request mutation
+		// testing while producing zero mutation targets for notifier semantics.
+		"internal/telegram/notifier",
 	)
 }
 
