@@ -141,13 +141,14 @@ func TestCanonicalizeNotificationExactTelegramLimitAccepted(t *testing.T) {
 func TestSameNotificationRecipientsMismatchMatrix(t *testing.T) {
 	r1 := notificationRecipient{TelegramUserID: 1, UserID: "one", ChatID: 11}
 	r2 := notificationRecipient{TelegramUserID: 2, UserID: "two", ChatID: 22}
+	changed := notificationRecipient{TelegramUserID: 2, UserID: "changed", ChatID: 22}
 	if !sameNotificationRecipients([]notificationDelivery{{Recipient: r1}, {Recipient: r2}}, []notificationRecipient{r1, r2}) {
 		t.Fatal("exact recipient set did not match")
 	}
 	if sameNotificationRecipients([]notificationDelivery{{Recipient: r1}}, []notificationRecipient{r1, r2}) {
 		t.Fatal("length mismatch accepted")
 	}
-	if sameNotificationRecipients([]notificationDelivery{{Recipient: r1}, {Recipient: r2}}, []notificationRecipient{r1, {TelegramUserID: 2, UserID: "changed", ChatID: 22}}) {
+	if sameNotificationRecipients([]notificationDelivery{{Recipient: r1}, {Recipient: r2}}, []notificationRecipient{r1, changed}) {
 		t.Fatal("semantic recipient mismatch accepted")
 	}
 }
