@@ -12,6 +12,10 @@
     "actions/upload-artifact": {
       "version": "v7.0.1",
       "sha": "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+    },
+    "aquasecurity/trivy-action": {
+      "version": "v0.33.1",
+      "sha": "ed142fd0673e97e23eac54620cfb913e5ce36c25"
     }
   }
 }
