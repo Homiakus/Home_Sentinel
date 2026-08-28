@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -8,7 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -229,22 +230,25 @@ func (n *DurableNotifier) selectRecipients(ctx context.Context) ([]notificationR
 	if len(recipients) == 0 {
 		return nil, ErrNoNotificationRecipients
 	}
-	sort.Slice(recipients, func(i, j int) bool {
-		return recipients[i].TelegramUserID < recipients[j].TelegramUserID
+	slices.SortFunc(recipients, func(a, b notificationRecipient) int {
+		return cmp.Compare(a.TelegramUserID, b.TelegramUserID)
 	})
 	return recipients, nil
 }
 
 func (n *DurableNotifier) claimPrepared(ctx context.Context, idempotencyKey string, telegramUserID int64) (notificationDelivery, bool, error) {
 	var last notificationDelivery
-	for attempt := 0; attempt < maxClaimAttempts; attempt++ {
+	for range maxClaimAttempts {
 		delivery, claimed, err := n.Deliveries.ClaimPrepared(ctx, idempotencyKey, telegramUserID)
 		if err != nil {
 			return notificationDelivery{}, false, err
 		}
 		last = delivery
-		if claimed || delivery.State != deliveryPrepared {
-			return delivery, claimed, nil
+		if claimed {
+			return delivery, true, nil
+		}
+		if delivery.State != deliveryPrepared {
+			return delivery, false, nil
 		}
 	}
 	return last, false, errors.New("telegram notifier: delivery claim contention did not converge")
