@@ -1,0 +1,44 @@
+{
+  "plan_item": "Stage 17 / callback acceptance boundary",
+  "intent": "Accept externally delivered callback tokens only after cryptographic verification, exact workflow-node-event-action binding and atomic replay admission.",
+  "status_before": "PARTIAL",
+  "risk_class": "CRITICAL",
+  "invariants": [
+    "A token cannot authorize a different execution, node, event or action than the target encoded in its signed claims.",
+    "Invalid signature, invalid time window, unknown key or binding mismatch cannot consume replay admission for a valid token.",
+    "For concurrent delivery of one valid token, exactly one caller may pass replay admission.",
+    "Stage-17 ingress rejects legacy callback tokens that do not carry an explicit action binding.",
+    "Key-rotation overlap remains valid for reviewed configured keys while retired keys fail closed."
+  ],
+  "contracts": [
+    "internal/security/callback Claims/Keyring/ReplayGuard",
+    "docs/AXIOM_IMPLEMENTATION_PLAN.md Stage 17",
+    "docs/testing/EDGE_SPACE_MODEL.md",
+    "docs/testing/MUTATION_TESTING.md"
+  ],
+  "code_surfaces": [
+    "internal/security/callback/token.go",
+    "internal/security/callback/accept.go",
+    "internal/security/callback/accept_test.go"
+  ],
+  "required_gates": [
+    "static",
+    "unit",
+    "property",
+    "fuzz",
+    "race",
+    "contract",
+    "integration",
+    "fault",
+    "mutation-critical",
+    "replay",
+    "security"
+  ],
+  "acceptance_evidence": [
+    "Exact-binding negative matrix passes.",
+    "Tampered and mismatched attempts do not burn a subsequently valid callback.",
+    "32-way concurrent duplicate delivery yields exactly one accepted callback and 31 replay rejections.",
+    "Critical changed-code mutation testing has no LIVED, NOT COVERED or TIMED OUT blocker.",
+    "Repository CI and race gates remain green."
+  ]
+}
