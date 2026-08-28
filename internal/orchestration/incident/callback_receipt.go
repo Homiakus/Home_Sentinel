@@ -101,11 +101,21 @@ func (s *Service) ResolveOwnerCallbackDecision(
 		}
 		// A concurrent delivery may have won between the preflight Get and the
 		// durable mutation. Re-read the receipt and converge on that result.
-		loaded, loadErr := s.Get(ctx, executionID)
-		if reconcileErr := reconcileStaleCallbackDecision(loaded, loadErr, eventID, envelope.Receipt, err); reconcileErr != nil {
-			return nil, reconcileErr
-		}
-		return s.Drive(ctx, executionID)
+		return s.finishStaleCallbackDecision(ctx, executionID, eventID, envelope.Receipt, err)
+	}
+	return s.Drive(ctx, executionID)
+}
+
+func (s *Service) finishStaleCallbackDecision(
+	ctx context.Context,
+	executionID string,
+	eventID string,
+	expected callbackDecisionReceipt,
+	staleErr error,
+) (*adgo.Execution, error) {
+	loaded, loadErr := s.Get(ctx, executionID)
+	if reconcileErr := reconcileStaleCallbackDecision(loaded, loadErr, eventID, expected, staleErr); reconcileErr != nil {
+		return nil, reconcileErr
 	}
 	return s.Drive(ctx, executionID)
 }
