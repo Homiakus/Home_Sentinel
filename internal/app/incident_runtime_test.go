@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -28,6 +29,29 @@ func (incidentRuntimeCallbackAuthority) Accept(string, callback.Binding) (callba
 
 func (incidentRuntimeCallbackAuthority) Sign(callback.Claims) (string, error) { return "signed", nil }
 
+func TestIncidentRuntimeShutdownTimeoutContract(t *testing.T) {
+	if incidentRuntimeShutdownTimeout != 10*time.Second {
+		t.Fatalf("shutdown timeout=%s want 10s", incidentRuntimeShutdownTimeout)
+	}
+}
+
+func TestStartIncidentRuntimeNilApplicationFails(t *testing.T) {
+	var a *App
+	if err := a.startIncidentRuntime(); err == nil || !strings.Contains(err.Error(), "application is required") {
+		t.Fatalf("nil application error=%v", err)
+	}
+}
+
+func TestStopIncidentRuntimeNoopWithoutRuntime(t *testing.T) {
+	var nilApp *App
+	if err := nilApp.stopIncidentRuntime(); err != nil {
+		t.Fatalf("nil app stop error=%v", err)
+	}
+	if err := (&App{}).stopIncidentRuntime(); err != nil {
+		t.Fatalf("empty app stop error=%v", err)
+	}
+}
+
 func TestStartIncidentRuntimeKeepsAuthorityOnlyModeTransportFree(t *testing.T) {
 	cfg := config.Default()
 	cfg.Database.Path = filepath.Join(t.TempDir(), "sentinel.db")
@@ -48,20 +72,101 @@ func TestStartIncidentRuntimeKeepsAuthorityOnlyModeTransportFree(t *testing.T) {
 	}
 }
 
-func TestStartIncidentRuntimeRejectsPartialProductionDependencies(t *testing.T) {
-	cfg := config.Default()
-	cfg.Database.Path = filepath.Join(t.TempDir(), "sentinel.db")
-	a := &App{
-		Config:   cfg,
-		Telegram: &tgsvc.Service{},
-		Health:   health.NewRegistry(),
-		Log:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+func TestStartIncidentRuntimeRejectsEachMissingProductionDependency(t *testing.T) {
+	cases := []struct {
+		name string
+		want string
+		drop func(*App)
+	}{
+		{name: "telegram client", want: "Telegram client unavailable", drop: func(a *App) { a.Telegram.Client = nil }},
+		{name: "database", want: "database unavailable", drop: func(a *App) { a.DB = nil }},
+		{name: "user store", want: "user store unavailable", drop: func(a *App) { a.Users = nil }},
+		{name: "audit store", want: "audit store unavailable", drop: func(a *App) { a.Audit = nil }},
+		{name: "lifecycle context", want: "lifecycle context unavailable", drop: func(a *App) { a.runCtx = nil }},
+		{name: "health registry", want: "health registry unavailable", drop: func(a *App) { a.Health = nil }},
 	}
-	if err := a.startIncidentRuntime(); err == nil || !strings.Contains(err.Error(), "production dependencies unavailable") {
-		t.Fatalf("startIncidentRuntime() error=%v, want dependency failure", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := newIncidentRuntimeTestApp(t, true)
+			tc.drop(a)
+			err := a.startIncidentRuntime()
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("startIncidentRuntime() error=%v want containing %q", err, tc.want)
+			}
+			if a.IncidentRuntime != nil || a.IncidentCallbacks != nil {
+				t.Fatal("missing dependency exposed incident runtime")
+			}
+		})
 	}
-	if a.IncidentRuntime != nil || a.IncidentCallbacks != nil {
-		t.Fatal("partial dependency failure exposed incident runtime")
+}
+
+func TestClassifyIncidentServeExitMatrix(t *testing.T) {
+	serveErr := errors.New("serve failed")
+	cases := []struct {
+		name          string
+		lifecycleErr  error
+		serveErr      error
+		wantUnexpected bool
+		wantNil       bool
+		wantServeErr  bool
+	}{
+		{name: "shutdown nil result", lifecycleErr: context.Canceled, serveErr: nil, wantNil: true},
+		{name: "shutdown preserves result", lifecycleErr: context.Canceled, serveErr: serveErr, wantServeErr: true},
+		{name: "active nil result is unexpected", wantUnexpected: true},
+		{name: "active error is unexpected", serveErr: serveErr, wantUnexpected: true, wantServeErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotErr, unexpected := classifyIncidentServeExit(tc.lifecycleErr, tc.serveErr)
+			if unexpected != tc.wantUnexpected {
+				t.Fatalf("unexpected=%v want=%v error=%v", unexpected, tc.wantUnexpected, gotErr)
+			}
+			if tc.wantNil && gotErr != nil {
+				t.Fatalf("error=%v want nil", gotErr)
+			}
+			if tc.wantServeErr && !errors.Is(gotErr, serveErr) {
+				t.Fatalf("error=%v want serve error", gotErr)
+			}
+			if tc.wantUnexpected && gotErr == nil {
+				t.Fatal("unexpected exit did not produce an error")
+			}
+		})
+	}
+}
+
+func TestWaitIncidentServeFaultMatrix(t *testing.T) {
+	if err := waitIncidentServe(nil, context.Canceled, time.Second); err == nil || !strings.Contains(err.Error(), "completion channel missing") {
+		t.Fatalf("nil completion channel error=%v", err)
+	}
+	ready := make(chan error, 1)
+	ready <- nil
+	if err := waitIncidentServe(ready, context.Canceled, 0); err == nil || !strings.Contains(err.Error(), "timeout must be positive") {
+		t.Fatalf("zero timeout error=%v", err)
+	}
+
+	timedOut := make(chan error)
+	if err := waitIncidentServe(timedOut, context.Canceled, time.Millisecond); err == nil || !strings.Contains(err.Error(), "did not stop") {
+		t.Fatalf("timeout error=%v", err)
+	}
+
+	shutdownErr := errors.New("worker noticed cancellation")
+	shutdown := make(chan error, 1)
+	shutdown <- shutdownErr
+	if err := waitIncidentServe(shutdown, context.Canceled, time.Second); err != nil {
+		t.Fatalf("canceled lifecycle should ignore terminal serve error: %v", err)
+	}
+
+	unexpectedNil := make(chan error, 1)
+	unexpectedNil <- nil
+	if err := waitIncidentServe(unexpectedNil, nil, time.Second); err == nil || !strings.Contains(err.Error(), "stopped unexpectedly") {
+		t.Fatalf("active lifecycle nil result error=%v", err)
+	}
+
+	serveErr := errors.New("serve failed")
+	unexpectedErr := make(chan error, 1)
+	unexpectedErr <- serveErr
+	if err := waitIncidentServe(unexpectedErr, nil, time.Second); !errors.Is(err, serveErr) {
+		t.Fatalf("active lifecycle serve error=%v want wrapped serve failure", err)
 	}
 }
 
@@ -125,6 +230,29 @@ func TestIncidentRuntimeWithoutCallbackAuthorityDoesNotExposeIngress(t *testing.
 	a.runCancel()
 	if err := a.stopIncidentRuntime(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAppCloseStopsIncidentRuntimeBeforeClosingSQLite(t *testing.T) {
+	a := newIncidentRuntimeTestApp(t, true)
+	db := a.DB
+	if err := a.startIncidentRuntime(); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if a.IncidentRuntime != nil || a.IncidentCallbacks != nil {
+		t.Fatal("App.Close left incident runtime state exposed")
+	}
+	if a.Telegram != nil {
+		t.Fatal("App.Close returned before closing Telegram dependency")
+	}
+	if a.DB != nil {
+		t.Fatal("App.Close returned before clearing SQLite dependency")
+	}
+	if err := db.PingContext(context.Background()); err == nil {
+		t.Fatal("SQLite remained open after App.Close")
 	}
 }
 
