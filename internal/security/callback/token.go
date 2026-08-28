@@ -50,6 +50,7 @@ type Claims struct {
 	ExecutionID string `json:"executionId"`
 	NodeID      string `json:"nodeId"`
 	EventID     string `json:"eventId"`
+	Subject     string `json:"subject,omitempty"`
 	// Action binds a Stage-17 ingress token to the exact callback operation it
 	// may authorize. It remains optional at the Stage-12 crypto primitive so
 	// previously issued/internal tokens can still be verified; Stage-17
