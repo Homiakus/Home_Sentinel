@@ -3,7 +3,7 @@
 > Единственный execution source of truth для progressive audit/implementation loop.
 > Архитектурные intent-документы (`docs/AXIOM_IMPLEMENTATION_PLAN.md`, `docs/SCENARIO_SYSTEM_PLAN.md`) остаются нормативными спецификациями, но выбор, статус и порядок работ определяются здесь и сверяются с фактическим `main`.
 
-**Plan revision:** 2026-08-28 / baseline `eb7ec252b96e92f981d58ea156bf4d4c7bf7c750`
+**Plan revision:** 2026-08-28 / verified through T-001 `905862f738df655478022570cb57fcf3b97b279e`
 
 ---
 
@@ -22,9 +22,9 @@
 - Go control plane уже содержит domain/event model, Axiom lifecycle, ADGO durable workflows, auth/authz, persistence/migrations, gateways, recovery, scenario AST/compiler/safety/catalog/simulator.
 - Media/data plane отделён от control plane; ML/VLM/LLM не являются authority source.
 - Stage 17 заметно продвинулся относительно recorded status: в `main` присутствуют callback ingress/runtime и durable Telegram notifier с per-recipient receipts.
-- Последний baseline commit перед созданием этого файла: `eb7ec252b96e92f981d58ea156bf4d4c7bf7c750`.
-- Для указанного baseline GitHub Actions `ci`, `security` и `mutation` завершились успешно.
-- Локальный clone/build в текущем execution environment недоступен из-за отсутствия outbound DNS к GitHub; поэтому начальный baseline опирается на observed repository + GitHub Actions evidence. Это environment limitation, не product pass/fail.
+- Planning iteration T-001 verified on `905862f738df655478022570cb57fcf3b97b279e`: GitHub Actions `ci`, `security` и `mutation` завершились `success`.
+- Default SQLite runtime directory does not need to pre-exist: `internal/database.Open` creates the parent directory with `os.MkdirAll` before opening a file-backed DB.
+- Локальный clone/build в текущем execution environment недоступен из-за отсутствия outbound DNS к GitHub; поэтому verification использует observed repository + GitHub Actions evidence. Это environment limitation, не product pass/fail.
 
 # 3. Architecture Map
 
@@ -60,7 +60,7 @@ Primary boundaries: `internal/domain`, `internal/orchestration`, `internal/gatew
 
 # 4. Baseline
 
-Observed at `eb7ec252...`:
+Observed baseline, re-verified by T-001 on `905862f...`:
 
 | Gate | Baseline | Evidence/notes |
 |---|---|---|
@@ -125,37 +125,33 @@ I-010. `main` must remain buildable and materially no worse after every iteratio
 
 **Recommended direction:** keep detailed domain plans as specifications; this file owns findings, atomic tasks, ordering and iteration log.
 
-## F-002 — Runtime SQLite database and WAL are tracked by Git
+## F-002 — Runtime SQLite database and WAL were tracked by Git
 
-**Status:** Planned
+**Status:** Resolved
 
 **Category:** Security / Data hygiene / Reproducibility
 
 **Severity:** High
 
-**Confidence:** Strong
+**Confidence:** Confirmed
 
-**Evidence:** tracked `data/sentinel.db` (4096 B), `data/sentinel.db-shm` (32768 B), `data/sentinel.db-wal` (716912 B); default config writes to `data/sentinel.db`; `.gitignore` does not exclude runtime DB/WAL/SHM.
+**Evidence:** repository tracked `data/sentinel.db`, `data/sentinel.db-shm`, `data/sentinel.db-wal`; default config writes to `data/sentinel.db`; the previous `.gitignore` did not exclude runtime DB/WAL/SHM.
 
-**Files / symbols:** `data/sentinel.db*`, `.gitignore`, `internal/config.Default`.
+**Files / symbols:** `data/sentinel.db*`, `.gitignore`, `internal/config.Default`, `internal/database.Open`.
 
-**Current behavior:** ordinary local execution can mutate files that are source-controlled.
-
-**Expected behavior:** runtime state is generated locally and ignored; repository contains only schema/migration/test fixtures intentionally reviewed as source.
+**Current behavior after T-002:** default runtime SQLite family is ignored and the three runtime artifacts are removed from the source tree. A clean first boot remains valid because `database.Open` creates the parent directory.
 
 **Root cause:** missing repository-state boundary for default runtime path.
 
-**Impact:** accidental disclosure of users/bindings/tokens metadata/audit state, non-deterministic diffs, stale WAL coupling, noisy or unsafe releases.
+**Impact / blast radius:** prevented future accidental commits of locally-mutated DB/WAL state and removed stale runtime artifacts from the current tree.
 
-**Blast radius:** every developer/operator running the default configuration in a checkout.
-
-**Reproduction:** inspect tracked `data/` and default DB path.
+**Reproduction:** before T-002 inspect parent commit `905862f...`; after T-002 inspect tracked tree and `/data/*.db*` ignore rule.
 
 **Affected invariants:** I-007, I-009, I-010.
 
 **Affected tasks:** T-002.
 
-**Recommended direction:** delete tracked runtime DB/WAL/SHM, ignore runtime DB family and preserve only an empty directory marker if required; verify CI and repository scanners.
+**Resolution:** remove tracked runtime DB/WAL/SHM and ignore `/data/*.db*`. No history rewrite or secret rotation was performed because the audit has not established that these binary artifacts contain committed credentials or secret values.
 
 ## F-003 — Recorded Stage 17 status is stale relative to `main`
 
@@ -205,7 +201,7 @@ I-010. `main` must remain buildable and materially no worse after every iteratio
 
 | Risk | Severity | Control / next action |
 |---|---|---|
-| source-controlled runtime DB state | High | T-002 immediately |
+| source-controlled runtime DB state | High | RESOLVED by T-002; verify post-push gates |
 | stale Stage 17 closure assumptions | High | T-003 before dependent API work |
 | schema/plan upgrade breaks waiting workflows | Critical | T-004 |
 | multi-process physical write race | Critical | T-006 |
@@ -218,7 +214,7 @@ I-010. `main` must remain buildable and materially no worse after every iteratio
 
 Highest-leverage near-term sequence:
 
-1. remove source-controlled runtime state;
+1. remove source-controlled runtime state — DONE by T-002;
 2. reconcile Stage 17 to eliminate false blockers and identify exact auth/ingress delta;
 3. close schema/plan versioning before more durable workflows/API surface;
 4. prove crash/recovery + process topology before production physical scale;
@@ -227,9 +223,9 @@ Highest-leverage near-term sequence:
 # 9. Dependency DAG
 
 ```text
-T-001 living plan
+T-001 living plan [DONE]
   |
-  +--> T-002 repo runtime-state hygiene
+  +--> T-002 repo runtime-state hygiene [DONE]
   +--> T-003 Stage17 evidence reconciliation
           |
           +--> T-004 schema/plan catalog + migration safety
@@ -295,7 +291,7 @@ Revert this documentation commit.
 
 ## T-002 — Remove tracked runtime SQLite state
 
-**Status:** READY
+**Status:** DONE
 
 **Priority:** P0
 
@@ -304,34 +300,43 @@ Revert this documentation commit.
 **Leverage:** HIGH
 
 ### Problem
-Default runtime DB/WAL/SHM are source-controlled.
+Default runtime DB/WAL/SHM were source-controlled.
 
 ### Goal
 Make runtime persistence impossible to commit accidentally under the default path.
 
 ### Scope
-`.gitignore`, `data/sentinel.db`, `data/sentinel.db-shm`, `data/sentinel.db-wal`; optionally `data/.gitkeep` if directory presence is operationally required.
+`.gitignore`, `data/sentinel.db`, `data/sentinel.db-shm`, `data/sentinel.db-wal`, plan reconciliation.
 
 ### Non-goals
-No DB schema migration; no history rewrite; no secret rotation unless evidence proves a committed secret.
+No DB schema migration; no history rewrite; no secret rotation without evidence of a committed secret.
+
+### Files / symbols
+`.gitignore`; `data/sentinel.db*`; `internal/config.Default`; `internal/database.Open`; `MASTER_PLAN.md`.
 
 ### Implementation
-Add narrow SQLite runtime ignore rules, remove tracked runtime artifacts, preserve intentional fixtures elsewhere.
+Ignore `/data/*.db*`; remove the three tracked runtime artifacts. Do not add `.gitkeep`: the DB opener creates its parent directory on first boot.
 
 ### Invariants
 I-007, I-009, I-010.
 
+### Compatibility constraints
+Default database path remains `data/sentinel.db`; application semantics and schema are unchanged.
+
 ### Edge cases
-`-wal`, `-shm`, journal variants; test fixture DBs outside runtime directory; clean first boot when `data/` is absent.
+WAL/SHM/journal-like DB siblings; clean first boot with absent `data/`; intentional test fixture DBs outside runtime directory remain unaffected.
 
 ### Tests
-Repository tree contains no runtime DB; ignore rules cover generated siblings; CI/security/mutation remain green.
+Repository tree must contain no tracked `data/sentinel.db*`; `.gitignore` must cover generated runtime siblings; standard CI/security/mutation must remain green after push.
 
 ### Mutation tests
-Not applicable to deletion-only repository hygiene.
+Not applicable to deletion-only repository hygiene; the repository mutation workflow remains a post-push gate.
+
+### Benchmarks
+Not applicable.
 
 ### Acceptance criteria
-Default app execution cannot dirty Git with SQLite runtime files.
+Default app execution can generate SQLite state without creating trackable source changes under `data/`.
 
 ### Verification commands
 `git ls-files 'data/*.db*'`; `git check-ignore data/sentinel.db data/sentinel.db-wal data/sentinel.db-shm`; standard CI/security/mutation.
@@ -339,11 +344,17 @@ Default app execution cannot dirty Git with SQLite runtime files.
 ### Dependencies
 T-001.
 
+### Blocks
+None after implementation; T-010 may now proceed independently.
+
 ### Risk
-Low/medium: must not delete intentional seed/fixture data.
+Low: no source fixture dependency was found; runtime opener creates the directory itself.
 
 ### Rollback
-Restore files only if proven source fixtures and move runtime DB elsewhere.
+Restore files only if later evidence proves they were intentional source fixtures, and move runtime DB to a separate ignored path first.
+
+### Estimated effort
+Small, one atomic commit.
 
 ## T-003 — Reconcile Stage 17 against executable evidence
 
@@ -539,11 +550,11 @@ Current CI has benchmark smoke for risk/correlation but not a complete product b
 
 Priority controls:
 
-1. repository/runtime-state boundary (T-002);
-2. complete/reconcile Stage 17 auth/ingress/RBAC evidence (T-003);
-3. schema/version fail-closed behavior (T-004);
-4. physical-action crash/fencing guarantees (T-005/T-006);
-5. release provenance/rollback (T-009).
+1. repository/runtime-state boundary — DONE by T-002;
+2. complete/reconcile Stage 17 auth/ingress/RBAC evidence — T-003;
+3. schema/version fail-closed behavior — T-004;
+4. physical-action crash/fencing guarantees — T-005/T-006;
+5. release provenance/rollback — T-009.
 
 Never lower authz, mutation, race or security gates to make an iteration green.
 
@@ -568,10 +579,12 @@ Destructive migration requires explicit backup/restore evidence and is never bun
 - **Rejected:** treat recorded Markdown checkboxes as evidence. Reason: code/tests/CI win over stale status.
 - **Rejected:** fix every audit observation immediately. Reason: all material scope enters Findings + Atomic Tasks first.
 - **Rejected:** force push to repair direct-main conflicts. Reason: forbidden and destroys traceability.
+- **Rejected:** rewrite Git history or rotate credentials solely because binary runtime DB files existed in the tree. Reason: no evidence currently proves a committed secret; preventive source-tree hygiene is the minimal justified change.
 
 # 19. Completed Tasks
 
 - T-001 — established living MASTER PLAN from observed `main` and current CI evidence.
+- T-002 — removed tracked default SQLite runtime state and established an ignore boundary for generated DB/WAL/SHM siblings.
 
 # 20. Iteration Log
 
@@ -585,15 +598,35 @@ Destructive migration requires explicit backup/restore evidence and is never bun
 
 **Changes:** created `MASTER_PLAN.md`; recorded observed architecture/baseline, invariants, risks, DAG and first atomic backlog.
 
-**Tests:** parent `main` baseline had successful `ci`, `security`, `mutation`; documentation diff self-reviewed; post-push workflows must remain green.
+**Tests:** post-push GitHub Actions `ci`, `security`, `mutation` all PASS on `905862f738df655478022570cb57fcf3b97b279e`.
 
-**Plan changes:** T-002 promoted to first implementation task because tracked runtime SQLite state violates repository/data boundary.
+**Plan changes:** T-002 promoted to first implementation task because tracked runtime SQLite state violated repository/data boundary.
 
-**Commit:** `docs(plan): establish living master plan`
+**Commit:** `905862f738df655478022570cb57fcf3b97b279e` — `docs(plan): establish living master plan`
 
 **Push:** main
 
-**Result:** PASS pending confirmation of post-push workflows; any failure reopens this iteration immediately.
+**Result:** PASS
+
+## Iteration 2
+
+**Task:** T-002
+
+**Findings addressed:** F-002
+
+**Unexpected findings:** none.
+
+**Changes:** added `/data/*.db*` source-control boundary; removed tracked `sentinel.db`, `sentinel.db-shm`, `sentinel.db-wal`; retained the configured path and first-boot behavior because `database.Open` creates the parent directory.
+
+**Tests:** preflight evidence: source tree contained exactly the three runtime SQLite artifacts; default DB path is `data/sentinel.db`; opener creates missing parent. Post-push required gates: `ci`, `security`, `mutation`.
+
+**Plan changes:** F-002 resolved; T-002 DONE; T-003 is next P0 reconciliation task. No history rewrite/secret rotation added without evidence.
+
+**Commit:** `chore(repo): stop tracking runtime sqlite state`
+
+**Push:** main
+
+**Result:** PASS pending post-push workflow confirmation; any failure reopens T-002 immediately.
 
 # 21. Definition of Final Done
 

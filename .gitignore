@@ -8,3 +8,6 @@
 .env
 .tools/
 .artifacts/
+
+# Default runtime persistence is generated locally and must never be committed.
+/data/*.db*
