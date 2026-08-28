@@ -7,13 +7,14 @@
     "The existing internal/incidents service remains the read-model/correlation service; the ADGO incident service is a distinct control-plane component.",
     "The production ADGO incident runtime is created only when the durable Telegram notifier can be constructed from the migrated SQLite database, current user store and Telegram client; medium/high incidents never run with a nil notifier.",
     "The ADGO production root is deterministic, local to the Sentinel data directory and independent of SQLite files so process restart addresses the same durable executions.",
-    "Callback ingress, when callbacks are enabled, references the exact same ADGO incident service instance used by production orchestration and the same current user/audit stores used by the application.",
-    "Callback security being enabled while the production incident runtime is unavailable fails startup closed rather than exposing an unusable or partially-authorized callback authority.",
-    "The long-lived ADGO Serve loop is owned by the application run context; context cancellation is normal shutdown, while an unexpected Serve failure is surfaced in health/log state.",
+    "Callback ingress, when callbacks are enabled, references the exact same ADGO incident runtime wrapper used by production orchestration and the same current user/audit stores used by the application.",
+    "CallbackSecurity may be initialized independently as a cryptographic authority, but no external CallbackIngress is exposed unless the production incident runtime and durable notifier are available; any future public callback transport must require that ingress explicitly.",
+    "The long-lived ADGO Serve loop is owned by the application run context; context cancellation is normal shutdown, while an unexpected Serve failure is surfaced in health/log state and fences all later runtime operations.",
     "Application shutdown cancels and joins the incident orchestration service before closing its durable runtime and before the shared SQLite database is closed.",
     "No Telegram token, callback signing key material or other secret is copied into ADGO workflow data, audit details or health messages.",
     "This slice exposes an explicit application trigger entrypoint but does not infer domainincident.Trigger from arbitrary raw events; event-to-trigger policy remains a separate reviewed boundary.",
-    "Concurrency tests use deterministic synchronization rather than sleep-based correctness."
+    "Concurrency tests use deterministic synchronization rather than sleep-based correctness.",
+    "The application incident runtime is a critical mutation surface and must produce ./internal/app as a mutation target without making unrelated app bootstrap files critical by default."
   ],
   "contracts": [
     "internal/orchestration/incident Service, Dependencies and CallbackIngress",
@@ -28,6 +29,9 @@
     "internal/app/app.go",
     "internal/app/incident_runtime.go",
     "internal/app/incident_runtime_test.go",
+    "internal/app/incident_runtime_state_test.go",
+    "internal/engloop/model.go",
+    "internal/engloop/incident_runtime_surface_test.go",
     "internal/orchestration/incident",
     "internal/telegram/notifier_test.go",
     "docs/engineering/ACTIVE_WORK_PACKET.json"
@@ -46,13 +50,14 @@
     "security"
   ],
   "acceptance_evidence": [
-    "Telegram-disabled startup does not create an incident orchestration runtime unless a supported non-Telegram notifier is explicitly supplied in tests.",
+    "Telegram-disabled startup leaves incident orchestration and CallbackIngress absent while an independently configured CallbackSecurity authority remains transport-inert and compatible with existing startup behavior.",
     "Telegram-enabled startup constructs DurableNotifier with PairingStore, UserStore and NotificationDeliveryStore over the migrated database and opens the ADGO runtime at the deterministic data root.",
-    "Callback-enabled startup fails closed unless the same production incident workflow is available, and successful wiring binds CallbackIngress to that exact workflow instance plus current users/audit/security authority.",
-    "Normal application cancellation joins the Serve loop without a false degraded health state; injected unexpected Serve failure is surfaced.",
-    "Close ordering tests prove orchestration is stopped and closed before shared database teardown.",
-    "Explicit application StartIncident accepts a valid domain trigger, is deterministic on redelivery and rejects calls when orchestration is unavailable.",
+    "When callbacks are configured and the production runtime exists, CallbackIngress binds to that exact runtime wrapper plus current users/audit/security authority rather than a separate workflow instance.",
+    "Normal application cancellation joins the Serve loop without a false degraded health state; an unexpected Serve exit is recorded and all later Start/callback operations fail closed.",
+    "Close ordering proves orchestration is stopped and closed before shared database teardown.",
+    "Explicit application StartIncident accepts a valid domain trigger, is deterministic on redelivery and rejects calls when orchestration is unavailable or stopped.",
     "The notifier concurrency regression contains no timing sleep used to establish correctness.",
+    "Gate planning classifies internal/app/incident_runtime.go as CRITICAL and selects ./internal/app for mutation testing while unrelated app.go remains noncritical for mutation targeting.",
     "Repository CI, race, security qualification and packet-wide mutation testing complete with no lived/not-covered/timed-out mutants on changed critical semantics."
   ]
 }
