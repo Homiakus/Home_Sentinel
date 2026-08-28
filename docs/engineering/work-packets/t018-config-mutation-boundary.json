@@ -1,0 +1,42 @@
+{
+  "plan_item": "T-018",
+  "intent": "Repair the engineering-loop test-of-tests boundary so security-sensitive runtime configuration changes are classified CRITICAL, produce an internal/config mutation target, and can verify the T-012 remote-bind validator instead of silently skipping Gremlins.",
+  "status_before": "OPEN",
+  "risk_class": "CRITICAL",
+  "invariants": [
+    "Security-bearing configuration validators are mutation-critical surfaces.",
+    "A production Go change under internal/config yields ./internal/config as a mutation target.",
+    "Critical Work Packets use only schema-valid PlanState and Gate values.",
+    "T-012 is not considered verified unless its remote-bind guard is included in a Gremlins diff rooted before the validator commit.",
+    "Mutation-gate setup failures are classified and fixed rather than normalized by rerunning."
+  ],
+  "contracts": [
+    "ClassifyPaths classifies internal/config production changes as CRITICAL.",
+    "MutationTargets maps internal/config production Go files to ./internal/config and ignores _test.go files.",
+    "GatePlan for internal/config includes mutation-critical and security.",
+    "The active mutation base remains ef8ecaf44d114c5e6341dab5fa6b869952407421 so the recovery campaign includes the original T-012 validator diff."
+  ],
+  "code_surfaces": [
+    "internal/engloop/model.go",
+    "internal/engloop/model_test.go",
+    "docs/engineering/work-packets/t012-runtime-bind-security.json",
+    "docs/engineering/work-packets/t018-config-mutation-boundary.json",
+    "docs/engineering/ACTIVE_WORK_PACKET.json",
+    "internal/config/model.go",
+    "internal/config/model_test.go"
+  ],
+  "required_gates": [
+    "static",
+    "unit",
+    "race",
+    "mutation-critical",
+    "security"
+  ],
+  "acceptance_evidence": [
+    "engloop unit tests prove internal/config is CRITICAL and targetable",
+    "the repaired T-012 packet decodes successfully under the real WorkPacket schema",
+    "the mutation workflow enters Critical diff mutation testing rather than failing during packet planning",
+    "Gremlins output includes mutations from the T-012 config validator range and the mutation validator accepts the evidence",
+    "repository ci/security/mutation checks pass on the recovery commit"
+  ]
+}

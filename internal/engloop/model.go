@@ -133,7 +133,6 @@ func ClassifyPaths(paths []string) RiskClass {
 			return RiskCritical
 		case hasAnyPrefix(p,
 			"internal/api/",
-			"internal/config/",
 			"internal/database/",
 			"internal/events/",
 			"internal/scenario/",
@@ -280,6 +279,10 @@ func isCriticalSurface(p string) bool {
 		"internal/auth/",
 		"internal/authz/",
 		"internal/authorization/",
+		// Runtime and hardened configuration carry fail-closed security,
+		// secret-reference and remote-exposure policy. Mutations that weaken
+		// these validators must be observable before the change can pass.
+		"internal/config/",
 		"internal/gateway/",
 		"internal/gateways/",
 		"internal/admission/",
@@ -291,8 +294,6 @@ func isCriticalSurface(p string) bool {
 		"internal/workflow/physical/",
 		// Durable notifiers are external side-effect gateways even though the
 		// concrete adapter lives with its integration-facing service package.
-		// Missing this prefix would let a CRITICAL work packet request mutation
-		// testing while producing zero mutation targets for notifier semantics.
 		"internal/telegram/notifier",
 	)
 }

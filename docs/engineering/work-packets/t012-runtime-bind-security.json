@@ -1,7 +1,7 @@
 {
   "plan_item": "T-012",
   "intent": "Fail closed on production runtime HTTP listen addresses that would expose the current plaintext server outside loopback. Full TLS serving is deliberately out of scope for this slice.",
-  "status_before": "READY",
+  "status_before": "OPEN",
   "risk_class": "CRITICAL",
   "invariants": [
     "The current runtime HTTP server may bind only to loopback until it actually serves TLS.",
@@ -24,8 +24,8 @@
     "static",
     "unit",
     "race",
-    "security",
-    "mutation"
+    "mutation-critical",
+    "security"
   ],
   "acceptance_evidence": [
     "table tests cover localhost, 127/8 and ::1 acceptance",

@@ -1,5 +1,5 @@
 {
-  "packet": "docs/engineering/work-packets/t012-runtime-bind-security.json",
+  "packet": "docs/engineering/work-packets/t018-config-mutation-boundary.json",
   "mutation_base": "ef8ecaf44d114c5e6341dab5fa6b869952407421",
   "max_commits": 8
 }

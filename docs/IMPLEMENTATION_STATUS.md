@@ -2,74 +2,65 @@
 
 ## Status semantics
 
-Observed snapshot only. `MASTER_PLAN.md` owns execution ordering/status; `docs/AXIOM_IMPLEMENTATION_PLAN.md` and `docs/SCENARIO_SYSTEM_PLAN.md` own detailed intent. Completion requires executable evidence.
+Observed snapshot only. `MASTER_PLAN.md` owns execution ordering/status; detailed intent remains in `docs/AXIOM_IMPLEMENTATION_PLAN.md` and `docs/SCENARIO_SYSTEM_PLAN.md`. Completion requires executable evidence.
 
 ## Current baseline
 
-- Go control plane with domain/event model, Axiom lifecycle, ADGO durable workflows, persistence/migrations, auth/authz, gateways/recovery and Scenario model/compiler/safety/catalog/simulator.
-- CI baseline: module hygiene, format, vet, unit, race, security qualification, critical-diff mutation and benchmark smoke.
-- Supply-chain baseline includes module lock, scanner/action pinning, vulnerability checks and SBOM evidence; release provenance/signing/rollback remain release qualification.
-- Runtime callback key material is loaded from secret references; callback security exposes a narrow acceptance/signing boundary.
-- Same-store physical resource reservations exist for Door/Siren/Camera Recovery; multi-process fencing remains open.
-- Headless Scenario stages 28–34 are implemented; authenticated API/UI authoring remains blocked by authority/API prerequisites.
+- Core Go control plane, Axiom/ADGO durable workflows, auth/authz, SQLite migrations/state, gateways/recovery and Scenario headless model/compiler/safety/catalog/simulator are present.
+- Standard CI covers module hygiene, formatting, vet, unit, race, engineering reconciliation and benchmark smoke.
+- Security qualification and critical-diff mutation are separate mandatory gates for applicable work.
+- T-011 removed the known siren race-test flake; no active unexplained flake is currently recorded.
+- Stage 17 evidence is reconciled in [`STAGE17_RECONCILIATION.md`](STAGE17_RECONCILIATION.md).
 
-## Stage 17 — reconciled status
+## T-012 runtime remote-bind hardening
 
-Stage 17 remains **PARTIAL**. Detailed evidence matrix: [`STAGE17_RECONCILIATION.md`](STAGE17_RECONCILIATION.md).
+Commit `d57f239f64477f46c0b6ca7d324f0423596eaf8d` implements the fail-closed runtime rule: until the production HTTP server actually terminates TLS, runtime binds are loopback-only.
 
-### Verified
+Observed on that commit:
 
-- bounded HTTP read-header/read/write/idle timeouts;
-- bounded + strict JSON command decoder;
-- request IDs;
-- local session authentication, HttpOnly/SameSite cookies, CSRF and CSP/security headers;
-- capability RBAC baseline for viewer/operator/admin; unlock requires `door:unlock` plus recent authentication;
-- callback keyring/secret-reference runtime and replay admission;
-- exact callback execution/node/event/action binding and human `usr_*` subject validation;
-- callback allow/deny authorization audit with fail-closed audit-before-allowed-mutation behavior;
-- durable medium-risk callback retry/restart dedupe and high-risk stale-resolution safety;
-- callback exactly-once semantic resume at orchestration boundary;
-- durable Telegram notifier frozen-recipient/per-recipient receipt/ambiguity semantics.
+- standard `ci`: PASS;
+- `security`: PASS;
+- mutation: FAILED before Gremlins execution because the new Work Packet used an invalid `status_before` enum.
 
-### Runtime remote-bind hardening — T-012 VERIFYING
+The runtime validator itself is therefore not classified as broken, but T-012 is **not verified** because its required test-of-tests did not execute.
 
-The production runtime previously accepted any non-empty listen address while the server used plaintext `ListenAndServe`, even though `HardenedServerConfig` already encoded the correct remote-TLS requirement.
+## F-012 / T-018 — mutation boundary recovery
 
-T-012 now makes the current runtime **loopback-only until TLS is actually served**:
+The mutation failure exposed a deeper engineering-loop defect:
 
-- `localhost`, IPv4 loopback and `::1` remain valid;
-- wildcard/unspecified, LAN and arbitrary remote hostnames fail with `ErrInsecureRemoteBind`;
-- malformed listen values fail as malformed `host:port`, not as a remote-bind policy error;
-- the default `127.0.0.1:8080` behavior is unchanged;
-- no certificate fields or false TLS capability are introduced.
+1. T-012 Work Packet used execution-plan vocabulary (`READY`) instead of WorkPacket `PlanState` vocabulary and used `mutation` instead of the real `mutation-critical` gate name.
+2. More importantly, `internal/config/` was only classified HIGH and was absent from `MutationTargets`. Even a CRITICAL packet could therefore request mutation while producing no config mutation target.
 
-Post-push CI/security/mutation evidence is still required before this item becomes DONE.
+T-018 repairs this boundary:
 
-### Remaining Stage 17 gaps
+- `internal/config/` becomes a CRITICAL surface;
+- production Go changes under it map to `./internal/config` mutation target;
+- architecture tests pin classification, target generation and mutation/security gates;
+- T-012 Work Packet is corrected to valid schema values;
+- active mutation base stays at `ef8ecaf44d114c5e6341dab5fa6b869952407421`, so the recovery campaign includes the original remote-bind validator change rather than testing only the engloop fix.
 
-1. Secure callback semantics are not wired to an external HTTP callback transport. **F-007 / T-013**.
-2. Principal types do not explicitly distinguish human user/service/system authority. **F-008 / T-014**.
-3. Authorization decision auditing is callback-specific and rate limiting is IP-scoped rather than principal-aware. **F-009 / T-015**.
-4. Common stale-command ETag/expected-version and HTTP `Idempotency-Key` contracts are absent. **F-011 / T-016**.
-5. Browser authentication is concrete local password/session auth, not a pluggable local/OIDC/mTLS boundary. **F-010 / T-017**.
+T-012 may become DONE only after T-018 lets the mutation workflow reach Gremlins and the resulting mutants are killed/accepted by the mutation evidence validator.
 
-## Important production gaps outside Stage 17
+## Stage 17 remaining work
 
-- durable event/lifecycle/ADGO plan versioning and in-flight upgrade/rollback;
-- crash/restore linearization around provider effects;
-- explicit single-writer versus multi-process physical fencing topology;
-- target-hardware latency/allocation/load budgets;
-- technical required-check protection for direct `main` updates;
-- reproducible release artifact/provenance/signing/checksums and restore drill.
+- T-013: narrow authenticated callback HTTP bearer adapter.
+- T-014: explicit human/service/system principal kinds and authority rules.
+- T-015: generic authorization audit + principal-aware abuse limiting.
+- T-016: common stale-command expected-version/ETag + request idempotency contract.
+- T-017: pluggable authenticator boundary after principal semantics.
 
-## Dependency-aware order
+## Other P0 production work
 
-1. Finish verification of T-012 remote-bind fail-closed guard.
-2. T-004 durable schema/plan evolution may proceed in parallel with later HTTP work.
-3. T-013/T-014/T-015/T-016 close callback transport/principal/audit/concurrency P0 residuals.
-4. T-005/T-006 crash/restore and process topology/fencing.
-5. T-007 authenticated Scenario API.
-6. T-008/T-009/T-010 operational/release/main-guard qualification.
-7. T-017 authenticator abstraction before claiming OIDC/mTLS modes.
+- T-004 durable event/lifecycle/ADGO plan versioning and in-flight upgrade/rollback.
+- T-005 crash/restore external-effect linearization.
+- T-006 explicit process topology / distributed fencing policy.
+- T-009 release provenance/reproducibility/rollback qualification.
+
+## Next order
+
+1. Verify T-018 recovery and then close T-012 if Gremlins proves the remote-bind guard mutation-resistant.
+2. Decompose/execute T-004 durable versioning as the next foundational Critical track.
+3. In parallel dependency order, close T-013/T-014/T-016 Stage 17 P0 residuals before authenticated Scenario API.
+4. T-005/T-006, then product API expansion and operational qualification.
 
 Execution truth: `../MASTER_PLAN.md`
