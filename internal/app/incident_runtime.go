@@ -17,15 +17,23 @@ import (
 
 var ErrIncidentRuntimeUnavailable = errors.New("application: incident orchestration runtime unavailable")
 
+type incidentWorkflowRuntime interface {
+	Start(context.Context, incident.Trigger) (*adgo.Execution, error)
+	Serve(context.Context) error
+	OwnerResponse(context.Context, string, string, any) (*adgo.Execution, error)
+	ResolveOwnerCallbackDecision(context.Context, string, string, incident.Decision, string, string, any) (*adgo.Execution, error)
+	Close() error
+}
+
 // IncidentRuntime owns one durable ADGO incident service and every authority
 // that may resume it. In particular, CallbackIngress delegates back through
 // this wrapper rather than holding an unrelated workflow instance.
 type IncidentRuntime struct {
-	Workflow  *orchestrationincident.Service
+	Workflow  incidentWorkflowRuntime
 	Callbacks *orchestrationincident.CallbackIngress
 
 	cancel context.CancelFunc
-	done   chan error
+	done   chan struct{}
 
 	mu        sync.RWMutex
 	serveErr  error
@@ -44,6 +52,8 @@ type incidentRuntimeOptions struct {
 	Audit            orchestrationincident.CallbackAuditStore
 	OnServeError     func(error)
 }
+
+type incidentRuntimeOpener func(context.Context, incidentRuntimeOptions) (*IncidentRuntime, error)
 
 func openIncidentRuntime(parent context.Context, opts incidentRuntimeOptions) (*IncidentRuntime, error) {
 	if parent == nil {
@@ -64,7 +74,7 @@ func openIncidentRuntime(parent context.Context, opts incidentRuntimeOptions) (*
 	runtime := &IncidentRuntime{
 		Workflow: workflow,
 		cancel:   cancel,
-		done:     make(chan error, 1),
+		done:     make(chan struct{}),
 	}
 	if opts.CallbacksEnabled {
 		runtime.Callbacks = &orchestrationincident.CallbackIngress{
@@ -89,11 +99,6 @@ func (r *IncidentRuntime) serve(ctx context.Context, onServeError func(error)) {
 
 	if serveErr != nil && onServeError != nil {
 		onServeError(serveErr)
-	}
-	if serveErr != nil {
-		r.done <- serveErr
-	} else {
-		r.done <- rawErr
 	}
 	close(r.done)
 }
@@ -155,6 +160,9 @@ func (r *IncidentRuntime) ResolveOwnerCallbackDecision(
 	return r.Workflow.ResolveOwnerCallbackDecision(ctx, executionID, eventID, decision, actor, reason, payload)
 }
 
+// Close is defined for runtimes returned by openIncidentRuntime. Construction
+// establishes non-nil Workflow/cancel/done fields, so shutdown intentionally
+// relies on those invariants rather than silently accepting partial runtimes.
 func (r *IncidentRuntime) Close() error {
 	if r == nil {
 		return nil
@@ -163,35 +171,65 @@ func (r *IncidentRuntime) Close() error {
 		r.mu.Lock()
 		r.closed = true
 		r.mu.Unlock()
-		if r.cancel != nil {
-			r.cancel()
+
+		r.cancel()
+		<-r.done
+
+		r.mu.RLock()
+		serveErr := r.serveErr
+		r.mu.RUnlock()
+		if serveErr != nil {
+			r.closeErr = serveErr
 		}
-		if r.done != nil {
-			if err, ok := <-r.done; ok && err != nil && !errors.Is(err, context.Canceled) {
-				r.closeErr = err
-			}
-		}
-		if r.Workflow != nil {
-			if err := r.Workflow.Close(); err != nil && r.closeErr == nil {
-				r.closeErr = err
-			}
+		if err := r.Workflow.Close(); err != nil && r.closeErr == nil {
+			r.closeErr = err
 		}
 	})
 	return r.closeErr
+}
+
+func validateIncidentRuntimeDependencies(a *App) error {
+	switch {
+	case a.DB == nil:
+		return errors.New("application: incident runtime database unavailable")
+	case a.Users == nil:
+		return errors.New("application: incident runtime user store unavailable")
+	case a.Audit == nil:
+		return errors.New("application: incident runtime audit store unavailable")
+	case a.Telegram == nil:
+		return errors.New("application: incident runtime Telegram service unavailable")
+	case a.Telegram.Client == nil:
+		return errors.New("application: incident runtime Telegram client unavailable")
+	case a.runCtx == nil:
+		return errors.New("application: incident runtime lifecycle context unavailable")
+	case a.Health == nil:
+		return errors.New("application: incident runtime health registry unavailable")
+	case a.Log == nil:
+		return errors.New("application: incident runtime logger unavailable")
+	default:
+		return nil
+	}
 }
 
 // startIncidentRuntime wires the currently supported production notifier.
 // CallbackSecurity may exist independently, but no CallbackIngress is exposed
 // unless this production workflow and its durable notifier are both available.
 func (a *App) startIncidentRuntime() error {
+	return a.startIncidentRuntimeWith(openIncidentRuntime)
+}
+
+func (a *App) startIncidentRuntimeWith(openRuntime incidentRuntimeOpener) error {
 	if a == nil {
 		return ErrIncidentRuntimeUnavailable
 	}
 	if !a.Config.Telegram.Enabled {
 		return nil
 	}
-	if a.DB == nil || a.Users == nil || a.Audit == nil || a.Telegram == nil || a.Telegram.Client == nil || a.runCtx == nil || a.Health == nil || a.Log == nil {
-		return errors.New("application: incident runtime dependencies unavailable")
+	if err := validateIncidentRuntimeDependencies(a); err != nil {
+		return err
+	}
+	if openRuntime == nil {
+		return errors.New("application: incident runtime opener unavailable")
 	}
 
 	notifier := &tgsvc.DurableNotifier{
@@ -202,7 +240,7 @@ func (a *App) startIncidentRuntime() error {
 	}
 	root := incidentRuntimeRoot(a.Config.Database.Path)
 	config := orchestrationincident.DefaultConfig(root)
-	runtime, err := openIncidentRuntime(a.runCtx, incidentRuntimeOptions{
+	runtime, err := openRuntime(a.runCtx, incidentRuntimeOptions{
 		Config:           config,
 		Notifier:         notifier,
 		CallbacksEnabled: a.Config.Security.Callbacks.Enabled,
@@ -217,6 +255,9 @@ func (a *App) startIncidentRuntime() error {
 	if err != nil {
 		return fmt.Errorf("open incident orchestration: %w", err)
 	}
+	if runtime == nil {
+		return errors.New("application: incident runtime opener returned nil runtime")
+	}
 	a.IncidentRuntime = runtime
 	a.Health.Set("incident_orchestration", "HEALTHY", "", "")
 	return nil
@@ -225,7 +266,10 @@ func (a *App) startIncidentRuntime() error {
 // StartIncident is the explicit application boundary for reviewed domain
 // triggers. Raw event-to-trigger policy is intentionally not inferred here.
 func (a *App) StartIncident(ctx context.Context, trigger incident.Trigger) (*adgo.Execution, error) {
-	if a == nil || a.IncidentRuntime == nil {
+	if a == nil {
+		return nil, ErrIncidentRuntimeUnavailable
+	}
+	if a.IncidentRuntime == nil {
 		return nil, ErrIncidentRuntimeUnavailable
 	}
 	return a.IncidentRuntime.Start(ctx, trigger)
