@@ -15,6 +15,7 @@ func TestClassifyPaths(t *testing.T) {
 		{name: "ordinary command", paths: []string{"cmd/sentinel/main.go"}, want: RiskMedium},
 		{name: "api", paths: []string{"internal/api/server.go"}, want: RiskHigh},
 		{name: "authz", paths: []string{"internal/authz/policy.go"}, want: RiskCritical},
+		{name: "durable notifier", paths: []string{"internal/telegram/notifier.go"}, want: RiskCritical},
 		{name: "highest wins", paths: []string{"internal/api/server.go", "internal/security/token.go"}, want: RiskCritical},
 	}
 	for _, tt := range tests {
@@ -40,9 +41,12 @@ func TestMutationTargetsCriticalProductionOnly(t *testing.T) {
 		"internal/authz/policy.go",
 		"internal/authz/policy_test.go",
 		"internal/scenario/compiler/compiler.go",
+		"internal/telegram/notifier.go",
+		"internal/telegram/notifier_store.go",
+		"internal/telegram/notifier_test.go",
 		"internal/cameras/model.go",
 	})
-	want := []string{"./internal/authz", "./internal/scenario/compiler"}
+	want := []string{"./internal/authz", "./internal/scenario/compiler", "./internal/telegram"}
 	if len(got) != len(want) {
 		t.Fatalf("MutationTargets()=%v want %v", got, want)
 	}
@@ -50,6 +54,26 @@ func TestMutationTargetsCriticalProductionOnly(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("MutationTargets()[%d]=%q want %q", i, got[i], want[i])
 		}
+	}
+}
+
+func TestMutationTargetsDurableNotifierCannotDisappearBehindMigration(t *testing.T) {
+	paths := []string{
+		"internal/database/migrations/0008_notification_delivery.sql",
+		"internal/telegram/notifier.go",
+		"internal/telegram/notifier_store.go",
+		"internal/telegram/notifier_test.go",
+	}
+	if got := ClassifyPaths(paths); got != RiskCritical {
+		t.Fatalf("ClassifyPaths()=%s want CRITICAL", got)
+	}
+	got := MutationTargets(paths)
+	if len(got) != 1 || got[0] != "./internal/telegram" {
+		t.Fatalf("MutationTargets()=%v want [./internal/telegram]", got)
+	}
+	gates := GatePlan(paths, ClassifyPaths(paths))
+	if !containsGate(gates, GateMutation) {
+		t.Fatalf("critical notifier gate plan missing mutation: %v", gates)
 	}
 }
 
