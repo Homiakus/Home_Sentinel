@@ -21,10 +21,10 @@ func (a *App) startIncidentRuntime() error {
 	if a.IncidentRuntime != nil {
 		return errors.New("incident runtime: already started")
 	}
-	if a.Config.Security.Callbacks.Enabled && a.Telegram == nil {
-		return errors.New("incident runtime: callbacks require enabled Telegram notification runtime")
-	}
 	if a.Telegram == nil {
+		// Callback signing/verification authority is intentionally independent
+		// from notification transport. Without Telegram there is no production
+		// incident workflow, so the narrower callback ingress remains absent.
 		return nil
 	}
 	if a.Telegram.Client == nil || a.DB == nil || a.Users == nil || a.Audit == nil {
