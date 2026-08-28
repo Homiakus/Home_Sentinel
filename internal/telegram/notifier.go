@@ -26,10 +26,10 @@ const (
 )
 
 var (
-	ErrNoNotificationRecipients     = errors.New("telegram notifier: no authorized notification recipients")
-	ErrNotificationConflict         = errors.New("telegram notifier: idempotency key reused with different semantics")
-	ErrNotificationRecipientConflict = errors.New("telegram notifier: conflicting eligible Telegram recipients")
-	ErrUnsupportedNotificationMedia = errors.New("telegram notifier: media notifications are not supported")
+	ErrNoNotificationRecipients       = errors.New("telegram notifier: no authorized notification recipients")
+	ErrNotificationConflict           = errors.New("telegram notifier: idempotency key reused with different semantics")
+	ErrNotificationRecipientConflict  = errors.New("telegram notifier: conflicting eligible Telegram recipients")
+	ErrUnsupportedNotificationMedia   = errors.New("telegram notifier: media notifications are not supported")
 	ErrUnsupportedNotificationChannel = errors.New("telegram notifier: unsupported notification channel")
 )
 
@@ -82,7 +82,7 @@ func (n *DurableNotifier) Notify(ctx context.Context, op gateway.Operation, in g
 		return gateway.EffectResult{}, err
 	}
 
-	frozen, created, err := n.loadOrFreeze(ctx, op, digest)
+	frozen, _, err := n.loadOrFreeze(ctx, op, digest)
 	if err != nil {
 		return gateway.EffectResult{}, err
 	}
@@ -162,7 +162,7 @@ func (n *DurableNotifier) Notify(ctx context.Context, op gateway.Operation, in g
 	if err := validateFrozenNotification(final, op, digest); err != nil {
 		return gateway.EffectResult{}, err
 	}
-	if result, done := summarizeFrozenNotification(final, sentAny || created); done {
+	if result, done := summarizeFrozenNotification(final, sentAny); done {
 		return result, nil
 	}
 	return gateway.EffectResult{}, errors.New("telegram notifier: delivery operation did not converge")
@@ -180,7 +180,18 @@ func (n *DurableNotifier) loadOrFreeze(ctx context.Context, op gateway.Operation
 	if err != nil {
 		return notificationOperation{}, false, err
 	}
-	return n.Deliveries.Freeze(ctx, op, digest, recipients)
+	frozen, created, err := n.Deliveries.Freeze(ctx, op, digest, recipients)
+	if err != nil {
+		return notificationOperation{}, false, err
+	}
+	if !created && !sameNotificationRecipients(frozen.Deliveries, recipients) {
+		return notificationOperation{}, false, errors.Join(
+			ErrNotificationConflict,
+			ErrNotificationRecipientConflict,
+			errors.New("telegram notifier: concurrent initial recipient freeze disagreed"),
+		)
+	}
+	return frozen, created, nil
 }
 
 func (n *DurableNotifier) selectRecipients(ctx context.Context) ([]notificationRecipient, error) {
@@ -284,6 +295,18 @@ func validateFrozenNotification(frozen notificationOperation, op gateway.Operati
 		)
 	}
 	return nil
+}
+
+func sameNotificationRecipients(deliveries []notificationDelivery, recipients []notificationRecipient) bool {
+	if len(deliveries) != len(recipients) {
+		return false
+	}
+	for i := range recipients {
+		if deliveries[i].Recipient != recipients[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func summarizeFrozenNotification(frozen notificationOperation, appliedThisCall bool) (gateway.EffectResult, bool) {
