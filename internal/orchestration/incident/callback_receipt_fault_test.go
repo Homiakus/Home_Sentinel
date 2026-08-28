@@ -53,14 +53,11 @@ func TestReconcileStaleCallbackDecisionFaultMatrix(t *testing.T) {
 	})
 
 	t.Run("malformed durable receipt", func(t *testing.T) {
-		loaded := &adgo.Execution{Data: map[string]json.RawMessage{
-			callbackHumanPayloadKey(): json.RawMessage(`{"callback_receipt":"broken"}`),
-		}}
-		// Build valid outer JSON with an invalid receipt value. Keeping the outer
-		// document valid ensures the test exercises receipt decoding, not legacy
-		// payload fallback.
-		loaded.Data[callbackHumanPayloadKey()] = json.RawMessage(`{"callback_receipt":"broken"}`)
-		loaded.Data[callbackHumanPayloadKey()] = json.RawMessage([]byte("{\"callback_receipt\":\"broken\"}"))
+		raw, marshalErr := json.Marshal(map[string]any{"callback_receipt": "broken"})
+		if marshalErr != nil {
+			t.Fatalf("marshal malformed receipt fixture: %v", marshalErr)
+		}
+		loaded := &adgo.Execution{Data: map[string]json.RawMessage{callbackHumanPayloadKey(): raw}}
 		err := reconcileStaleCallbackDecision(loaded, nil, expected.EventID, expected, stale)
 		if !errors.Is(err, stale) || !strings.Contains(err.Error(), "decode durable callback receipt") {
 			t.Fatalf("error=%v want stale+receipt decode failure", err)
