@@ -16,6 +16,8 @@ func TestClassifyPaths(t *testing.T) {
 		{name: "api", paths: []string{"internal/api/server.go"}, want: RiskHigh},
 		{name: "authz", paths: []string{"internal/authz/policy.go"}, want: RiskCritical},
 		{name: "durable notifier", paths: []string{"internal/telegram/notifier.go"}, want: RiskCritical},
+		{name: "app runtime wiring", paths: []string{"internal/app/incident_runtime.go"}, want: RiskCritical},
+		{name: "app bootstrap", paths: []string{"internal/app/app.go"}, want: RiskCritical},
 		{name: "highest wins", paths: []string{"internal/api/server.go", "internal/security/token.go"}, want: RiskCritical},
 	}
 	for _, tt := range tests {
@@ -74,6 +76,27 @@ func TestMutationTargetsDurableNotifierCannotDisappearBehindMigration(t *testing
 	gates := GatePlan(paths, ClassifyPaths(paths))
 	if !containsGate(gates, GateMutation) {
 		t.Fatalf("critical notifier gate plan missing mutation: %v", gates)
+	}
+}
+
+func TestMutationTargetsAppRuntimeWiringCannotDisappear(t *testing.T) {
+	paths := []string{
+		"internal/app/app.go",
+		"internal/app/incident_runtime.go",
+		"internal/app/incident_runtime_test.go",
+	}
+	if got := ClassifyPaths(paths); got != RiskCritical {
+		t.Fatalf("ClassifyPaths()=%s want CRITICAL", got)
+	}
+	got := MutationTargets(paths)
+	if len(got) != 1 || got[0] != "./internal/app" {
+		t.Fatalf("MutationTargets()=%v want [./internal/app]", got)
+	}
+	gates := GatePlan(paths, ClassifyPaths(paths))
+	for _, required := range []Gate{GateFault, GateMutation, GateReplay, GateSecurity} {
+		if !containsGate(gates, required) {
+			t.Fatalf("critical app-runtime gate plan missing %q: %v", required, gates)
+		}
 	}
 }
 
