@@ -75,7 +75,11 @@ func (a *Acceptor) Accept(token string, expected Binding) (Claims, error) {
 		now = a.now().UTC()
 	}
 	if err := a.replay.Consume(claims, now); err != nil {
-		return Claims{}, err
+		// Preserve already-verified, exactly-bound claims on replay. The strict
+		// replay error remains intact, while higher layers can reconcile the
+		// duplicate against durable domain state without re-verifying or parsing
+		// untrusted token material a second time.
+		return claims, err
 	}
 	return claims, nil
 }
