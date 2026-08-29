@@ -1,5 +1,5 @@
 {
-  "packet": "docs/engineering/work-packets/t024-camera-v1-execution-bundle.json",
-  "mutation_base": "a130177ed3b2b57aded26b32ec003e6da0da2c46",
-  "max_commits": 5
+  "packet": "docs/engineering/work-packets/t005-external-effect-crash-linearization.json",
+  "mutation_base": "6a2be3eddd54aff6a69ee1693b2034fbe92d910d",
+  "max_commits": 6
 }

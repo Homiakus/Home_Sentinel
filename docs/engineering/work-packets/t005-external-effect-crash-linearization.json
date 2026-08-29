@@ -1,0 +1,62 @@
+{
+  "plan_item": "T-005",
+  "intent": "Prove Home Sentinel physical external-effect crash/restore linearization across the exact ADGO window where a provider accepted an effect but the activity completion commit was lost, preserving durable idempotency identity and preventing blind duplicate physical application.",
+  "status_before": "OPEN",
+  "risk_class": "CRITICAL",
+  "invariants": [
+    "ADGO is treated as at-least-once; exactly-once is never inferred from task status.",
+    "The durable task and non-empty idempotency key exist before any physical provider invocation.",
+    "A provider-applied effect followed by a lost ADGO completion commit leaves recoverable durable work, not an invented successful completion.",
+    "Lease recovery/redelivery after restart uses the exact persisted idempotency key from the original task.",
+    "Confirmed duplicate delivery is safe only when the gateway/provider can identify the original idempotency key and return already-applied semantics without a second physical application.",
+    "Unknown provider outcome is never converted into a blind retry; the workflow remains in explicit ambiguous/reconciliation/human-safe state.",
+    "Crash-window tests control Store commit and lease state directly and never depend on wall-clock sleeps or scheduler luck.",
+    "Door, siren and camera recovery retain their already-verified execution-bundle identities throughout fault recovery.",
+    "A test-only critical slice must not introduce semantic-neutral production changes merely to manufacture mutation targets."
+  ],
+  "contracts": [
+    "pinned Axiom ADGO Store.Create/Load/Commit and PebbleStore durability",
+    "pinned Axiom ADGO Engine task enqueue/claim/lease recovery/fencing semantics",
+    "pinned Axiom external-effect contract: persist task + idempotency before invoke, legal redelivery after lost completion commit",
+    "internal/gateway.Operation and EffectResult",
+    "internal/orchestration/action/door CompilePlan/NewRegistry v1 semantics",
+    "internal/orchestration/action/siren compiled plan/registry semantics",
+    "internal/orchestration/recovery/camera CompilePlan/NewRegistry v1 semantics",
+    "internal/gateway/fake DoorController, SirenController and CameraRecoveryController idempotency observability",
+    "Stage17 durable Telegram notifier crash receipt protocol is already separately verified and is out of duplicate implementation scope",
+    "internal/engloop MutationTargets excludes _test.go and I-018 applies only when a production target is selected"
+  ],
+  "code_surfaces": [
+    "internal/orchestration/action/door/*crash*_test.go",
+    "internal/orchestration/action/siren/*crash*_test.go",
+    "internal/orchestration/recovery/camera/*crash*_test.go",
+    "internal/orchestration/*fault*_test.go",
+    "internal/gateway/fake/* only if a genuine reusable fault-observability capability is required"
+  ],
+  "required_gates": [
+    "static",
+    "unit",
+    "property",
+    "fuzz",
+    "race",
+    "contract",
+    "integration",
+    "fault",
+    "mutation-critical",
+    "replay",
+    "security"
+  ],
+  "acceptance_evidence": [
+    "A deterministic Store decorator fails exactly the post-provider activity-completion Commit while leaving the underlying durable running task unchanged.",
+    "Before the injected commit failure, the test proves the provider applied the effect exactly once and records the task's original non-empty idempotency key.",
+    "After Pebble close/reopen, lease expiry is forced by controlled durable state mutation rather than elapsed-time waiting, and a new Engine/coordinator recovers the task.",
+    "Recovered/redelivered work presents the identical persisted idempotency key to the gateway.",
+    "Door reaches the intended final lock state while fake physical Applied remains exactly 1 across crash/recovery.",
+    "Siren reaches the intended final state while fake physical Applied remains exactly 1 across crash/recovery; cancellation/compensation behavior is not weakened.",
+    "Camera reconnect recovery reaches a verified stream state with exactly one physical reconnect application across crash/recovery.",
+    "Ambiguous provider outcomes remain explicit reconciliation/human-safe paths and do not auto-reinvoke an effect whose application cannot be proven.",
+    "Fault tests contain no time.Sleep or inflated timeout used as correctness synchronization.",
+    "Repository CI, race and security/supply-chain qualification pass.",
+    "If changed production critical Go files select mutation targets, Gremlins produces non-empty clean evidence; if changes are genuinely test-only, mutation planner selects no production target and the packet does not add artificial production code solely for mutation statistics."
+  ]
+}
