@@ -15,16 +15,28 @@ type Dependencies struct {
 	Door gateway.DoorController
 }
 
+// NewRegistry is the active registry surface. While door v1 is the active
+// version it deliberately resolves to the immutable v1 handler bundle. A real
+// semantic v2 must add a separate versioned registry and handler set instead of
+// changing these v1 implementations in place.
 func NewRegistry(deps Dependencies) *adgo.Registry {
+	return newRegistryV1(deps)
+}
+
+func newRegistryV1(deps Dependencies) *adgo.Registry {
 	registry := adgo.NewRegistry()
-	registry.Activity(ActivityValidate, validateRequest)
-	registry.Decision(DecisionRoute, routeRequest)
-	registry.Activity(ActivityApply, applyDesiredState(deps.Door))
-	registry.Activity(ActivityRecord, recordResult)
+	registry.Activity(ActivityValidate, validateRequestV1)
+	registry.Decision(DecisionRoute, routeRequestV1)
+	registry.Activity(ActivityApply, applyDesiredStateV1(deps.Door))
+	registry.Activity(ActivityRecord, recordResultV1)
 	return registry
 }
 
-func validateRequest(_ context.Context, req adgo.ActivityRequest) (adgo.ActivityResult, error) {
+// The V1-suffixed handlers are durable execution semantics. Future door plan
+// versions must introduce distinct handlers rather than reusing and mutating
+// these implementations, because PlanDigest covers the graph but not Go
+// handler behavior.
+func validateRequestV1(_ context.Context, req adgo.ActivityRequest) (adgo.ActivityResult, error) {
 	request, err := readData[domainaction.DoorRequest](req.Data, "request")
 	if err != nil {
 		return adgo.ActivityResult{}, adgo.Fail(adgo.FailureInvalidInput, err)
@@ -35,7 +47,7 @@ func validateRequest(_ context.Context, req adgo.ActivityRequest) (adgo.Activity
 	return adgo.ActivityResult{Facts: map[string]any{"request_valid": true}, Outcome: adgo.OutcomeCompleted}, nil
 }
 
-func routeRequest(_ context.Context, snapshot adgo.Snapshot) (adgo.Outcome, error) {
+func routeRequestV1(_ context.Context, snapshot adgo.Snapshot) (adgo.Outcome, error) {
 	request, err := readData[domainaction.DoorRequest](snapshot.Data, "request")
 	if err != nil {
 		return adgo.OutcomeFail, err
@@ -50,7 +62,7 @@ func routeRequest(_ context.Context, snapshot adgo.Snapshot) (adgo.Outcome, erro
 	}
 }
 
-func applyDesiredState(controller gateway.DoorController) adgo.ActivityHandler {
+func applyDesiredStateV1(controller gateway.DoorController) adgo.ActivityHandler {
 	return func(ctx context.Context, req adgo.ActivityRequest) (adgo.ActivityResult, error) {
 		if controller == nil {
 			return adgo.ActivityResult{}, adgo.Fail(adgo.FailurePermanent, errors.New("door action: controller is not configured"))
@@ -99,7 +111,7 @@ func applyDesiredState(controller gateway.DoorController) adgo.ActivityHandler {
 	}
 }
 
-func recordResult(_ context.Context, _ adgo.ActivityRequest) (adgo.ActivityResult, error) {
+func recordResultV1(_ context.Context, _ adgo.ActivityRequest) (adgo.ActivityResult, error) {
 	return adgo.ActivityResult{Outcome: adgo.OutcomeCompleted}, nil
 }
 

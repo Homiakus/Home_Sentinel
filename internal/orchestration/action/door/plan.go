@@ -10,6 +10,12 @@ const (
 	PlanID      = "home-sentinel-door-action"
 	PlanVersion = "1"
 
+	// doorV1PlanDigest is the immutable durable identity of the access-control
+	// plan introduced in dc1e32de on the same pinned Axiom compiler revision.
+	// A semantic v1 graph change must fail this boundary rather than silently
+	// reinterpret persisted executions.
+	doorV1PlanDigest = "sha256:ca5201ec70e540f7323176f4a2ca156c9c6a373bd35a664d33c0178b51cd6880"
+
 	ActivityValidate = "DoorValidateRequest"
 	DecisionRoute    = "DoorRouteRequest"
 	ActivityApply    = "DoorApplyDesiredState"
@@ -28,6 +34,13 @@ const (
 )
 
 func CompilePlan() (*adgo.Plan, error) {
+	return compilePlanVersion(PlanVersion)
+}
+
+// compilePlanVersion exists so upgrade tests can prove retained-v1 plus a
+// distinct future active identity through the same bundle machinery without
+// shipping a fake semantic v2 in production.
+func compilePlanVersion(version string) (*adgo.Plan, error) {
 	retry := adgo.DefaultRetryPolicy()
 	apply := func(id, next string) adgo.Node {
 		return adgo.Node{
@@ -47,7 +60,7 @@ func CompilePlan() (*adgo.Plan, error) {
 	}
 	return adgo.Compile(adgo.Definition{
 		ID:          PlanID,
-		Version:     PlanVersion,
+		Version:     version,
 		InitialData: []string{"request"},
 		Metadata: map[string]string{
 			"purpose": "safe desired-state door control with reconciliation",
