@@ -2,7 +2,7 @@
 
 > Single execution source of truth for progressive audit, atomic implementation and verified direct-to-main delivery. Detailed architecture/product plans remain intent specifications; this file owns findings, invariants, ordering and execution state.
 
-**Plan revision:** 2026-08-28 / T-019 and T-020 verified on `36d4847bbb1bd51adc0a4e4bd76c5b480f1be918`; F-015 discovered during T-004 characterization; T-021 is the next atomic durable-upgrade slice.
+**Plan revision:** 2026-08-29 / T-021 verified on `8b13e5565590ac1d86f1e4ea7d9c8213542022fb`; F-016 discovered during the next T-004 workflow inventory; T-022 is the active P0 slice.
 
 ---
 
@@ -17,12 +17,12 @@ Unexpected material discoveries are recorded before implementation scope expands
 # 2. Current State
 
 - Go control plane: typed domain/events, Axiom lifecycle, ADGO durable workflows, auth/authz, SQLite state, gateways/recovery and Scenario compiler/safety/catalog/simulator.
-- Verified tasks: T-001, T-002, T-003, T-011, T-012, T-018, T-019, T-020.
-- T-019 makes `internal/orchestration/` and `internal/engloop/` mutation-critical.
-- T-020 makes zero-mutant critical evidence fail closed. Recovery campaign over T-019+T-020 produced 2 mutants, killed 2, lived/not-covered 0, efficacy and mutator coverage 100%; ci/race/security also PASS on the same SHA.
-- T-004 characterization: ADGO already persists PlanID/PlanVersion/PlanDigest and pinned Axiom already supplies ExecutionCatalog, multi-plan Host and digest routing.
-- New F-015: a pinned DAG is insufficient if historical executions use current handler semantics. Incident v1 and v2 differ in risk assessment/archive behavior and owner-response node binding.
-- Local full module execution is unavailable in this agent environment due network dependency resolution; GitHub Actions is authoritative.
+- Verified tasks: T-001, T-002, T-003, T-011, T-012, T-018, T-019, T-020, T-021.
+- T-019 makes `internal/orchestration/` and `internal/engloop/` mutation-critical; T-020 makes zero-mutant critical evidence fail closed.
+- T-021 retains complete incident v1/v2 execution bundles and routes durable state by persisted identity through Axiom Host.
+- T-021 final evidence on `8b13e556...`: ci/race/security PASS; Gremlins 69 killed, 0 lived, 0 not-covered, 0 timeout; efficacy/coverage 100%.
+- T-004 inventory has now exposed F-016: siren plan identity is derived from `MaxActivationDuration`, so a config change after crash can strand an already-enabled physical effect under the old digest.
+- Local full module execution is unavailable in this agent environment due dependency-network resolution; GitHub Actions remains authoritative.
 
 # 3. Architecture Map
 
@@ -42,7 +42,7 @@ Media / sensors -> typed evidence/events
 SQLite      : app/auth/audit + schema_migrations
 ADGO/Pebble : Execution PlanID/PlanVersion/PlanDigest + durable history
 Axiom Host  : multi-plan engine registry/routing by persisted digest
-Bundle      : immutable plan + versioned handlers + signal bindings
+Bundle      : immutable plan + versioned handlers + external bindings/config semantics
 Scenario    : AST -> validation -> Safety Compiler -> lowering -> catalog/simulator
 ```
 
@@ -53,13 +53,13 @@ Primary boundaries: `internal/domain`, `internal/orchestration`, `internal/gatew
 | Gate | Baseline |
 |---|---|
 | module/build hygiene | PASS |
-| formatting | PASS |
-| vet/static | PASS |
+| vulnerability/static | PASS |
+| formatting/vet | PASS |
 | unit/integration | PASS |
 | race | PASS; no active unexplained flake |
-| security qualification | PASS |
-| config critical mutation | PASS, 1 killed mutant |
-| orchestration/engloop mutation | PASS, non-empty evidence; 2/2 killed on T-019+T-020 recovery range |
+| security/SBOM/Trivy | PASS |
+| config critical mutation | PASS, non-empty killed evidence |
+| orchestration/engloop mutation | PASS; latest incident campaign 69/69 killed |
 | benchmark smoke | PASS |
 | target-hardware performance | OPEN T-008 |
 
@@ -82,9 +82,10 @@ Primary boundaries: `internal/domain`, `internal/orchestration`, `internal/gatew
 - **I-015** Security-bearing configuration validators are mutation-critical and create executable mutation work.
 - **I-016** Safety/control orchestration and engineering gate-policy code are mutation-critical.
 - **I-017** Existing ADGO executions run only against their pinned PlanID/PlanDigest; active plan changes never silently reinterpret durable state.
-- **I-018** A CRITICAL mutation campaign with selected production targets is invalid evidence when Gremlins generates zero mutants.
-- **I-019** Durable workflow identity pins an execution bundle: plan graph, version-specific handler semantics and external signal bindings; pinning only PlanDigest is insufficient.
-- **I-020** Unknown persisted non-terminal plan/bundle identity fails startup or control-plane qualification closed; it is never silently skipped.
+- **I-018** A CRITICAL mutation campaign with selected production targets is invalid when Gremlins generates zero mutants.
+- **I-019** Durable workflow identity pins an execution bundle: plan graph, version-specific handler semantics and external signal bindings; pinning only PlanDigest plus current handlers is insufficient.
+- **I-020** Unknown persisted non-terminal plan/bundle identity fails startup/control-plane qualification closed; it is never silently skipped.
+- **I-021** Configuration-derived durable plans that own physical effects must be reconstructible and routable by persisted identity across restart; a config change must not orphan safety timers, cancellation or compensation.
 
 # 6. Findings Registry
 
@@ -122,36 +123,37 @@ Primary boundaries: `internal/domain`, `internal/orchestration`, `internal/gatew
 **Status:** Planned | **Severity:** High | T-016.
 
 ## F-012 — Security configuration was not mutation-targetable
-**Status:** Resolved | **Severity:** High | T-018; Gremlins killed 1/1.
+**Status:** Resolved | **Severity:** High | T-018.
 
 ## F-013 — Safety orchestration and gate-policy code were not mutation-critical
-**Status:** Resolved | **Severity:** High | **Confidence:** Confirmed | T-019 + T-020.
-
-T-019 routes `internal/orchestration/` and `internal/engloop/` as CRITICAL. Recovery range on `36d4847...` selected `./internal/engloop`, produced 2 mutants and killed both; ci/race/security PASS.
+**Status:** Resolved | **Severity:** High | T-019 + T-020.
 
 ## F-014 — Critical mutation campaign accepted zero generated mutants
-**Status:** Resolved | **Severity:** High | **Confidence:** Confirmed | T-020.
+**Status:** Resolved | **Severity:** High | T-020.
 
-`MutationReport.HasMutationEvidence()` and CLI fail-closed semantics reject `MutantsTotal==0`. Recovery campaign produced non-empty clean evidence (2 killed, 0 lived/not-covered).
+## F-015 — Pinned incident plan could execute with drifted handlers/bindings
+**Status:** Resolved | **Severity:** Critical | **Confidence:** Confirmed | T-021.
 
-## F-015 — Pinned plan can execute with drifted handler semantics
-**Status:** Planned / ACTIVE | **Severity:** Critical | **Confidence:** Confirmed
+Incident v1 and v2 now retain immutable plan + version-specific Registry/handlers + signal bindings, use Axiom Host routing by persisted digest, validate unknown non-terminal state fail-closed, and prove Pebble reopen plus historical callback semantics. Final `8b13e556...` mutation campaign: 69/69 killed, no blockers.
 
-**Category:** Durability / Upgrade / Orchestration semantics.  
-**Evidence:** historical incident v1 (`caa446b...`) and current v2 use the same Axiom revision `7682ba9170dd`, so historical definition can be recompiled compatibly; however v1 `assessRisk` uses the original local scoring formula and `archiveIncident` writes `archived=true`, while current handlers use `riskpolicy.DefaultPolicy()` and different archive facts. v1 also waits on `await-owner-response`; v2 uses `await-owner-ack`.  
-**Root cause:** Home Sentinel service binds one current Registry and current signal-node constants to all executions. Durable ADGO identity pins the plan digest but the application has no immutable versioned execution-bundle catalog.  
-**Impact:** after upgrade an old execution may be routed to the correct DAG but execute new business/safety semantics, or fail to consume the correct external event.  
-**Blast radius:** all long-lived workflows whose handlers/bindings evolve independently of PlanDigest.  
-**Invariants:** I-008, I-017, I-019, I-020.  
-**Task:** T-021 first; T-004 remains the umbrella durable-evolution objective.
+## F-016 — Config-derived siren plan can strand an enabled physical effect across restart
+**Status:** ACTIVE | **Severity:** Critical | **Confidence:** Confirmed
+
+**Category:** Physical safety / Durability / Configuration evolution.  
+**Evidence:** `siren.CompilePlan(maxActivation)` sets `Version = "1-" + maxActivation.String()` and embeds the duration into the safety wait; the enable node owns the physical siren effect and records `SirenEnsureDisabled` compensation. Current `siren.Open` compiles only the current duration and uses one `adgo.OpenProduction` engine. Pinned Axiom single-engine resilient coordination skips non-terminal executions whose PlanDigest differs from the engine plan.  
+**Failure sequence:** enable under duration A -> process crash -> config changes to duration B -> reopen only B -> old A execution is not advanced by the B engine; its timer/disable/compensation can become unreachable from current `Drive`/`Stop`.  
+**Root cause:** runtime configuration is part of durable plan identity but the service has no reconstructible historical plan catalog/Host routing.  
+**Impact:** a siren may remain physically enabled beyond its intended safety window after crash plus config change.  
+**Blast radius:** siren timer, manual cancellation, compensation, restart recovery and any future config-derived physical workflow plan.  
+**Invariants:** I-002, I-005, I-008, I-017, I-020, I-021.  
+**Task:** T-022.
 
 # 7. Risk Register
 
 | Risk | Severity | Control |
 |---|---|---|
-| old execution uses new handler semantics | Critical | T-021 ACTIVE |
-| unknown historical digest silently stranded | Critical | T-021/I-020 |
-| in-flight workflow incompatible after upgrade | Critical | T-004 via T-021+follow-ups |
+| siren enabled under old duration becomes unreachable after restart/config change | Critical | T-022 ACTIVE |
+| in-flight workflow incompatible after upgrade | Critical | T-004 continuation |
 | callback transport absent | High | T-013 |
 | machine/human principal ambiguity | High | T-014 |
 | stale/duplicate HTTP command | High | T-016 |
@@ -162,8 +164,8 @@ T-019 routes `internal/orchestration/` and `internal/engloop/` as CRITICAL. Reco
 
 # 8. Pareto Improvements
 
-1. T-021 retain incident v1/v2 execution bundles and prove restart across upgrade.
-2. Finish T-004 across remaining long-lived workflows/version surfaces.
+1. T-022 make siren config-derived physical safety restart-safe.
+2. Continue T-004 inventory/version retention across remaining long-lived workflows (door/camera and persisted schema surfaces).
 3. T-013/T-014 callback transport/principal authority.
 4. T-005/T-006 crash/fencing guarantees.
 5. T-016 common command preconditions.
@@ -174,9 +176,9 @@ T-019 routes `internal/orchestration/` and `internal/engloop/` as CRITICAL. Reco
 ```text
 T-001 DONE -> T-002 DONE -> T-011 DONE -> T-003 DONE
                                       |-> T-012 DONE -> T-018 DONE -> T-013 READY
-                                      |-> T-019 DONE -> T-020 DONE -> T-021 -> T-004 close
-                                      |                                      |-> T-005
-                                      |                                      |-> T-006
+                                      |-> T-019 DONE -> T-020 DONE -> T-021 DONE -> T-022 -> T-004 continuation
+                                      |                                                   |-> T-005
+                                      |                                                   |-> T-006
                                       |-> T-014 -> T-015 / T-017
                                       |-> T-016
 T-001 -> T-010
@@ -188,58 +190,56 @@ T-004/T-005/T-006 + T-008 -> T-009
 # 10. Implementation Phases
 
 - **A Truth/gates:** T-001/T-002/T-003/T-011/T-012/T-018/T-019/T-020/T-010.
-- **B Durable evolution + identity/transport:** T-021 -> T-004..T-006 and T-013..T-017.
+- **B Durable evolution + identity/transport:** T-021 DONE -> T-022 -> remaining T-004/T-005/T-006 and T-013..T-017.
 - **C Product surface:** T-007.
 - **D Qualification:** T-008/T-009.
 
 # 11. Atomic Tasks
 
-## T-001/T-002/T-003/T-011/T-012/T-018/T-019/T-020
-**Status:** DONE. Verified commits recorded in Iteration Log.
+## T-001/T-002/T-003/T-011/T-012/T-018/T-019/T-020/T-021
+**Status:** DONE. Verified commits/evidence recorded below.
 
 ## T-004 — Pin durable workflow execution semantics across upgrade
-**Status:** ACTIVE via T-021 | **Priority:** P0
+**Status:** ACTIVE via T-022 and remaining workflow inventory | **Priority:** P0
 
-Axiom already supplies durable plan identity, ExecutionCatalog, Pebble catalog support, multi-plan Host, digest routing and conservative explicit migration APIs. Home Sentinel must retain complete historical execution bundles and prove restart/rollback behavior rather than recreate Axiom routing.
+Axiom already supplies durable plan identity, ExecutionCatalog, Pebble catalog support, multi-plan Host, digest routing and conservative explicit migration APIs. Home Sentinel retains/reconstructs complete historical execution semantics rather than recreating Axiom routing.
 
-## T-021 — Retain incident v1/v2 execution bundles across upgrade
-**Status:** READY | **Priority:** P0 | **Type:** DURABILITY | **Risk:** CRITICAL
+## T-022 — Retain/reconstruct siren duration bundles across config changes
+**Status:** READY | **Priority:** P0 | **Type:** PHYSICAL SAFETY / DURABILITY | **Risk:** CRITICAL
 
 ### Problem
-Incident service currently opens only current v2 plan/Registry and uses current node constants for signals. Historical v1 has different handler semantics and response node.
+Siren PlanVersion and safety timer are derived from `MaxActivationDuration`. A crash followed by duration change opens a new digest while an old execution may already own an enabled physical effect and compensation stack.
 
 ### Goal
-New incidents start on active v2; persisted v1 executions continue after restart using exact v1 plan, v1 handlers and v1 signal bindings. Unknown non-terminal digests fail closed.
+New siren executions start on the configured duration; every supported non-terminal historical duration execution is reconstructed from persisted identity, digest-verified, registered in Axiom Host and remains controllable through Drive/Stop/Serve. Unsupported/malformed identity fails closed.
 
 ### Scope
-`internal/orchestration/incident`: immutable v1/v2 bundle descriptors, historical v1 handlers, Host-backed service routing, version-specific owner-response binding and durable upgrade tests.
+`internal/orchestration/action/siren`: duration-version parser/reconstruction, bundle catalog, Host-backed service routing and Pebble crash/config-change tests.
 
 ### Implementation direction
-- retain an exact v1 plan definition from `caa446b...` and assert identity/version/digest compatibility;
-- retain exact v1 handler semantics separately from current v2 handlers;
-- define immutable bundle metadata including plan, Registry and event/node bindings;
-- use Axiom `Host` over the existing Production Store/Router; do not reimplement host routing or backend creation;
-- start new executions explicitly on active v2 bundle;
-- for Drive/Get/Signal/Human operations, load persisted execution and select the exact bundle/engine by PlanDigest;
-- validate non-terminal persisted executions against registered bundle digests at startup/qualification; unknown digest is an error;
-- migrate `Serve` to Host coordinator/worker semantics without double-running the single-plan production engine;
-- keep migration explicit; do not silently rewrite v1 durable state into v2.
+- preserve current `CompilePlan(maxActivation)` semantics and make its `1-<duration>` identity canonical/reversible;
+- parse only canonical positive duration versions; reject malformed/zero/negative/alias forms;
+- scan non-terminal persisted siren executions on Open, reconstruct each unique historical plan, and verify PlanID + canonical PlanVersion + PlanDigest exactly before registration;
+- register active and reconstructed historical plans with fresh Registries in Axiom Host over the existing Production Store/Router;
+- Start only on active bundle; same execution id remains idempotent;
+- Drive/Stop load persisted execution first and select its exact engine; historical cancellation must reach the original compensation stack;
+- Serve performs synchronous fail-closed validation before Host coordinator/worker plus active schedule runner;
+- do not rewrite old state to the active duration and do not fork Axiom durable logic.
 
 ### Acceptance
-- v1 and v2 bundle identities are deterministic and distinct;
-- v1 handler behavior has characterization tests proving historical risk/archive semantics;
-- Memory test proves concurrent v1/v2 routing by persisted digest;
-- Pebble test: create/drive v1 to waiting, close, reopen with v2 active + v1 retained, resume through v1 binding, no duplicate notification, completion uses v1 semantics;
-- new execution after reopen uses v2;
-- unknown persisted non-terminal digest fails closed;
-- current v2 tests remain green;
-- race/security/mutation-critical PASS with non-empty orchestration mutants and no survivors/not-covered blockers.
+- parser round-trips canonical positive durations and rejects malformed/zero/negative/non-canonical versions;
+- Pebble: duration A execution enables siren and waits; process closes; reopen same store with duration B; old execution remains A; Stop+Drive through historical engine reaches canceled and compensation disables siren;
+- new execution after reopen uses duration B plan/version/digest;
+- malformed historical version and valid-version/digest mismatch fail Open closed;
+- existing automatic timer/manual-stop behavior remains green;
+- race/security PASS;
+- Gremlins produces non-empty `internal/orchestration/action/siren` evidence with zero lived/not-covered/timeout blockers.
 
 ## T-005 — Crash/restore external-effect linearization
-**Status:** TODO | **Priority:** P0 | Depends T-004.
+**Status:** TODO | **Priority:** P0 | Depends T-004 relevant surfaces.
 
 ## T-006 — Supported topology/fencing
-**Status:** TODO | **Priority:** P0 | Depends T-004.
+**Status:** TODO | **Priority:** P0 | Depends T-004 relevant surfaces.
 
 ## T-007 — Authenticated Scenario API
 **Status:** BLOCKED | **Priority:** P1.
@@ -272,15 +272,15 @@ New incidents start on active v2; persisted v1 executions continue after restart
 
 G0 build/static/module; G1 unit/golden; G2 property/fuzz/model; G3 race; G4 contract/integration; G5 fault/crash; G6 mutation; G7 E2E/HIL/UX; G8 performance/soak/release.
 
-Critical edge space: `input x identity x authority x time x ordering x concurrency x persistence x external failure x ownership x topology x plan-version x handler-version x signal-binding x cancellation x recovery x gate-classification x evidence-emptiness`.
+Critical edge space: `input x identity x authority x time x ordering x concurrency x persistence x external failure x ownership x topology x plan-version x handler-version x config-derived-version x signal-binding x cancellation x compensation x recovery x gate-classification x evidence-emptiness`.
 
 # 13. Mutation Testing Strategy
 
 - Critical changed semantics require real Gremlins execution and non-empty generated evidence.
-- `MutantsTotal==0` is failure when the workflow was invoked for selected critical targets.
+- `MutantsTotal==0` is failure when selected critical targets exist.
 - Config, orchestration, engloop, principal policy, command preconditions, migration guards and physical gateways are mutation-critical.
-- Version-routing/unknown-digest guards are mutation-critical.
-- Surviving/not-covered mutants require contract analysis; never weaken gates merely to obtain green.
+- Version parsing/routing/digest guards and physical cancellation/compensation recovery are mutation-critical.
+- Surviving/not-covered/timeout mutants require contract analysis; never weaken gates merely to obtain green.
 
 # 14. Performance Baselines
 
@@ -288,11 +288,13 @@ Benchmark smoke is regression smoke only. T-008 owns target-hardware latency/thr
 
 # 15. Security Hardening
 
-Source-state hygiene DONE; deterministic siren safety DONE; Stage17 truth DONE; remote plaintext guard DONE; config mutation boundary DONE; orchestration taxonomy DONE; zero-evidence guard DONE. Next: durable execution bundles -> callback/principal/preconditions -> crash/fencing -> main/release qualification.
+Source-state hygiene DONE; deterministic siren test DONE; Stage17 truth DONE; remote plaintext guard DONE; config mutation boundary DONE; orchestration taxonomy DONE; zero-evidence guard DONE; incident execution bundles DONE. Next: siren physical restart safety -> callback/principal/preconditions -> crash/fencing -> main/release qualification.
 
 # 16. Migration Strategy
 
-`characterize old plan + handlers + bindings -> retain immutable old execution bundle -> introduce active new bundle -> route existing state by durable identity -> explicit migration only at safe/quiescent point -> verify restart/rollback -> retire old bundle only after no durable references remain`.
+`characterize old semantics -> derive/retain immutable historical execution bundle -> introduce active new bundle -> route existing state by durable identity -> explicit migration only at safe/quiescent point -> verify restart/rollback -> retire old bundle only after no durable references remain`.
+
+For config-derived plans, reconstruction itself is a compatibility boundary: parsed configuration, canonical version and recompiled digest must all agree before the bundle is accepted.
 
 # 17. Deferred Work
 
@@ -312,12 +314,13 @@ Broad Scenario UI/UX; full TLS listener/cert lifecycle; OIDC/mTLS implementation
 - automatic plan substitution/migration on startup;
 - pinning only the DAG while reusing drifted current handlers;
 - silently ignoring unknown non-terminal plan digests;
+- treating current runtime config as permission to reinterpret historical physical state;
 - reimplementing Axiom Host/migration logic;
 - force push.
 
 # 19. Completed Tasks
 
-T-001, T-002, T-003, T-011, T-012, T-018, T-019, T-020.
+T-001, T-002, T-003, T-011, T-012, T-018, T-019, T-020, T-021.
 
 # 20. Iteration Log
 
@@ -329,11 +332,17 @@ T-001, T-002, T-003, T-011, T-012, T-018, T-019, T-020.
 - **6 T-012** `d57f239...`: ci/security PASS; mutation setup exposed F-012.
 - **7 T-018** `26b28f...`: config mutation boundary; Gremlins killed 1/1; all gates PASS.
 - **8 F-013 plan/closure** `aaafae7...`: planning gates PASS.
-- **9 T-019** `6b55fe38...`: ci/race/security PASS; mutation self-triggered but zero mutants exposed F-014.
-- **10 F-014 planning** `a69bc45...`: finding/work packet recorded; ci/security PASS; false-success reproduced.
-- **11 T-020** `36d4847...`: ci/race/security PASS; planner CRITICAL + `./internal/engloop`; Gremlins killed 2/2, lived/not-covered 0; closes F-013/F-014 and T-019/T-020.
-- **12 F-015/T-021 planning:** record execution-bundle semantic pinning requirement before T-004 runtime changes.
+- **9 T-019** `6b55fe38...`: ci/race/security PASS; zero-mutant result exposed F-014.
+- **10 F-014 planning** `a69bc45...`: finding/work packet recorded.
+- **11 T-020** `36d4847...`: ci/race/security PASS; Gremlins 2/2 killed; closes F-013/F-014 and T-019/T-020.
+- **12 F-015/T-021 planning** `36d9c31...`: execution-bundle invariant recorded; planning gates PASS.
+- **13 T-021 scope reconciliation** `d72c415...`: callback/read-model version-aware scope recorded; planning gates PASS.
+- **14 T-021 runtime** `e6e2bd4...`: ci/race/security PASS; mutation 62 killed but exposed characterization/testability blockers.
+- **15 T-021 mutation recovery** `a68b497...`: ci/race/security PASS; mutation improved to 66 killed with remaining lived/not-covered/timeout blockers.
+- **16 T-021 testability recovery** `a2adcd87...`: Gremlins 69/69 killed, 100%/100%; standard CI exposed only a gofmt defect in the new test file.
+- **17 T-021 format closure** `8b13e556...`: full ci/race/reconciliation/benchmark + security/SBOM/Trivy + Gremlins 69/69 PASS; closes F-015/T-021.
+- **18 F-016/T-022 planning:** record config-derived siren physical-safety restart invariant before implementation.
 
 # 21. Definition of Final Done
 
-No unresolved Critical/High findings without accepted deferral; all P0/P1 acceptance verified; remote exposure safe; critical test-of-tests has selected targets and non-empty clean mutation evidence; explicit principal kinds; durable plan+handler+binding upgrade/restart/rollback; crash/fencing tests; stale/idempotency HTTP contracts; security/race/static/fault/mutation green; hardware budgets met; no unexplained flakes; docs match code; final re-audit finds no fundamental blocker; last verified state is main with no force push.
+No unresolved Critical/High findings without accepted deferral; all P0/P1 acceptance verified; remote exposure safe; critical test-of-tests has selected targets and non-empty clean mutation evidence; explicit principal kinds; durable plan+handler+binding/config evolution and restart/rollback; crash/fencing tests; stale/idempotency HTTP contracts; security/race/static/fault/mutation green; hardware budgets met; no unexplained flakes; docs match code; final re-audit finds no fundamental blocker; last verified state is main with no force push.

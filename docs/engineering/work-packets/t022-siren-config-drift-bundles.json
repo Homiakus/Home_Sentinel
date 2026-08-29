@@ -1,0 +1,56 @@
+{
+  "plan_item": "T-022",
+  "intent": "Prevent a MaxActivationDuration configuration change from orphaning a non-terminal siren execution or its physical compensation by reconstructing and routing exact historical duration-derived execution bundles across restart.",
+  "status_before": "OPEN",
+  "risk_class": "CRITICAL",
+  "invariants": [
+    "A siren execution that has enabled a physical device remains routable to its exact persisted plan after process restart even when MaxActivationDuration changes.",
+    "Historical siren plan versions are reconstructed only from the canonical version form 1-<positive Go duration> and the recompiled PlanID, PlanVersion and PlanDigest must exactly match persisted identity.",
+    "Unknown, malformed or digest-mismatched non-terminal siren execution identity fails Open or preflight closed.",
+    "New siren executions start only on the currently configured duration bundle.",
+    "Drive and Stop select the engine matching the persisted execution digest before advance or cancellation.",
+    "Cancellation of a historical execution retains access to its compensation stack and SirenEnsureDisabled handler.",
+    "The shared Axiom Store and Host remain the durable execution authority; Home Sentinel does not fork or duplicate the workflow kernel.",
+    "Configuration change never silently rewrites an existing siren execution into the active plan."
+  ],
+  "contracts": [
+    "plan version encoding is canonical and reversible to MaxActivationDuration",
+    "reconstructed historical plan digest exactly equals the persisted digest before registration",
+    "Axiom Host registers active and reconstructed historical siren engines over the existing Production Store",
+    "service Start explicitly uses the active bundle and preserves same-execution idempotency",
+    "service Drive, Stop and non-terminal Get validate and route by persisted bundle identity",
+    "Serve validates persisted siren executions before starting Host coordinator/worker and the active schedule runner",
+    "terminal historical executions do not block startup but non-terminal unknown identities do",
+    "resourceguard still fences conflicting physical ownership across executions independent of bundle version"
+  ],
+  "code_surfaces": [
+    "internal/orchestration/action/siren/plan.go",
+    "internal/orchestration/action/siren/handlers.go",
+    "internal/orchestration/action/siren/service.go",
+    "internal/orchestration/action/siren/siren_test.go",
+    "internal/orchestration/action/siren/*bundle*",
+    "internal/orchestration/action/siren/*upgrade*"
+  ],
+  "required_gates": [
+    "static",
+    "unit",
+    "property",
+    "race",
+    "contract",
+    "fault",
+    "mutation-critical",
+    "replay",
+    "security"
+  ],
+  "acceptance_evidence": [
+    "Pebble test enables a siren under duration A, closes the process, reopens the same store under different duration B, cancels/drives the old execution through its historical engine and proves the siren is disabled by compensation",
+    "old execution retains duration-A PlanVersion/PlanDigest while a new execution after reopen uses duration B",
+    "historical cancellation does not duplicate the original enable and compensation applies exactly once semantically",
+    "malformed historical version is rejected fail-closed",
+    "valid version with mismatched persisted digest is rejected fail-closed",
+    "canonical duration parser rejects zero, negative and non-canonical aliases",
+    "existing automatic safety timer and manual-stop tests remain green",
+    "ci/race/security pass",
+    "Gremlins produces non-empty siren orchestration evidence with no lived/not-covered/timeout critical blockers"
+  ]
+}
