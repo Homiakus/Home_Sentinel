@@ -32,9 +32,14 @@ services:
     image: ${SENTINEL_IMAGE:?set SENTINEL_IMAGE to an exact version or digest}
     restart: unless-stopped
     ports:
-      - "${SENTINEL_BIND_IP:-127.0.0.1}:8080:8080"
+      # Control-plane HTTP is intentionally host-loopback only. A VPN or
+      # authenticated TLS reverse proxy on the host may publish it remotely.
+      - "127.0.0.1:8080:8080"
     environment:
-      SENTINEL_LISTEN: 0.0.0.0:8080
+      # The application itself remains loopback-only. sentinel-ingress shares
+      # this container's network namespace and bridges container port 8080 to
+      # the private application listener at 127.0.0.1:18080.
+      SENTINEL_LISTEN: 127.0.0.1:18080
       SENTINEL_DB_PATH: /var/lib/home-sentinel/sentinel.db
       SENTINEL_CONFIG: /etc/home-sentinel/config.json
       SENTINEL_FRIGATE_CREDENTIALS_DIR: /var/lib/home-sentinel/frigate-secrets
@@ -49,6 +54,15 @@ services:
     networks: [control, app_egress, camera_egress]
     depends_on:
       mosquitto:
+        condition: service_started
+
+  sentinel-ingress:
+    image: ${SENTINEL_IMAGE:?set SENTINEL_IMAGE to an exact version or digest}
+    restart: unless-stopped
+    network_mode: "service:sentinel"
+    command: ["proxy", "--listen", "0.0.0.0:8080", "--upstream", "http://127.0.0.1:18080"]
+    depends_on:
+      sentinel:
         condition: service_started
 
   homeassistant:
@@ -82,24 +96,18 @@ services:
     networks: [control]
 
 networks:
-  # Internal service-to-service plane. No direct Internet egress.
   control:
     internal: true
     ipam:
       config:
         - subnet: ${SENTINEL_CONTROL_SUBNET:-172.30.250.0/24}
 
-  # Internet/LAN egress for Sentinel (Telegram/offsite backup) and Home
-  # Assistant integrations. HS-127 will generate host firewall rules.
   app_egress:
     driver: bridge
     ipam:
       config:
         - subnet: ${SENTINEL_APP_EGRESS_SUBNET:-172.30.251.0/24}
 
-  # Dedicated egress plane for camera traffic. Sentinel needs it for camera
-  # discovery/probing; Frigate needs it for RTSP/ONVIF. Host/router firewall
-  # must allow only configured camera VLAN/CIDRs and deny WAN egress.
   camera_egress:
     driver: bridge
     ipam:

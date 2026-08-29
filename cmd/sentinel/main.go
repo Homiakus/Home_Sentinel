@@ -29,7 +29,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: sentinel <serve|version|checkpoint|restore-checkpoint>")
+		return errors.New("usage: sentinel <serve|proxy|version|checkpoint|restore-checkpoint>")
 	}
 	switch args[0] {
 	case "version":
@@ -37,6 +37,8 @@ func run(args []string) error {
 		return nil
 	case "serve":
 		return serve()
+	case "proxy":
+		return runProxy(args[1:])
 	case "checkpoint":
 		return checkpoint(args[1:])
 	case "restore-checkpoint":
