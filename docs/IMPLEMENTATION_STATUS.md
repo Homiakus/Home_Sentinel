@@ -4,19 +4,20 @@
 
 ## Verified foundation
 
-T-001/T-002/T-003/T-004/T-011/T-012/T-018/T-019/T-020/T-021/T-022/T-023/T-024 are verified.
+T-001/T-002/T-003/T-004/T-005/T-011/T-012/T-018/T-019/T-020/T-021/T-022/T-023/T-024 are verified.
 
-Latest durable-upgrade evidence on `6a2be3eddd54aff6a69ee1693b2034fbe92d910d`:
-- module/build, vulnerability, format, vet, unit, race, engineering-loop reconciliation and benchmark smoke: PASS;
+Latest physical crash-linearization evidence on `2e8b9606212f47bf04d66bf5f1833a52195b7018`:
+- module hygiene, supply-chain, vulnerability, format, vet, unit, race, engineering-loop reconciliation and benchmark smoke: PASS;
 - security/SBOM/Trivy: PASS;
-- mutation planner: `risk=CRITICAL`, `mutation_targets=["./internal/orchestration/recovery/camera"]`;
-- Gremlins over the T-024 range: `Killed=52`, `Lived=0`, `Not covered=0`, `Timed out=0`, efficacy 100%, mutator coverage 100%; artifact `9713262585`, SHA-256 `c7442a70aaa5cd1523892d2c73a463e5ec0dbcf7e6d04c98634b73ed4897c344`;
-- camera v1 identity is frozen at `sha256:a0781f96957948af4ea5535c04f1a00ffffa40653c55cd0ed8ea0cfbcd20706f` with explicitly v1-pinned handler semantics/operator binding;
-- Pebble tests prove restart at operator wait, exact persisted-bundle routing, unknown/mismatched non-terminal fail-closed behavior, terminal-history compatibility, and retained-v1 + distinct future-active coexistence;
-- the first T-024 mutation campaign exposed one uncovered existing-execution guard and one Serve-preflight timeout mutant; deterministic tests/seam closed both without weakening gates;
-- an intermediate recovery commit introduced a `ServeResilient` function-signature compile mismatch; govulncheck package loading caught it immediately, it was classified as introduced, and the exact adapter fix was reverified through the full suite.
+- engineering loop classifies the active T-005 range `CRITICAL` but selects `mutation_targets=[]` because the implementation is genuinely `_test.go`-only; no production refactor was introduced merely to manufacture mutation evidence;
+- deterministic fault harness fails exactly the post-provider ADGO completion commit after a physical effect, preserves the durable running task and original non-empty idempotency key, reopens Pebble, forces lease expiry by persisted state mutation and proves safe redelivery;
+- door reaches the intended locked state with one physical write; recovered delivery is suppressed by observed desired state;
+- camera reaches verified stream state while redelivery presents the exact same idempotency key and the provider deduplicates the second delivery;
+- siren enable is physically applied once; recovery remains waiting on the durable safety timer; the timer is made due by persisted `NotBefore` mutation and exactly one separate safety-disable completes the workflow;
+- unresolved ambiguous door outcome remains in human/reconciliation state and a redrive does not blindly invoke the provider;
+- no crash correctness assertion uses `time.Sleep`, scheduler probability or timeout inflation.
 
-This closes T-024, F-017 and umbrella T-004.
+This closes T-005.
 
 ## Durable workflow evolution inventory — complete
 
@@ -25,30 +26,27 @@ This closes T-024, F-017 and umbrella T-004.
 - door action — immutable v1 retained-bundle boundary verified;
 - camera recovery — immutable v1 retained-bundle boundary verified.
 
-No ADGO workflow family remains without an explicit upgrade/restart identity boundary.
+## T-006 — active P0 supported-topology slice
 
-## T-005 — active P0 physical crash-linearization slice
+F-018 is confirmed: physical-resource admission is durable across executions but only process-locally atomic. `resourceguard.Check` explicitly requires the caller to serialize `Check + StartOrLoad` within one process, and door/siren/camera use a process-local `sync.Mutex` for that sequence. Two control-plane processes can therefore both observe a free resource before either creates its durable reservation.
 
-Pinned ADGO is explicitly at-least-once. It commits a durable task plus idempotency key before invoking an external worker. If a provider accepts an effect and the process dies before the activity completion commit, task redelivery is legal. Exactly-once cannot be inferred from ADGO state; the handler/provider boundary must deduplicate or reconcile.
+Pinned ADGO already exposes a `Production.Admission` controller, but an expiring TTL permit is not sufficient whole-execution fencing for workflows that may remain in human/reconciliation waits unless a dedicated heartbeat/ownership lifecycle is added. v1 will therefore not claim distributed multi-writer support.
 
-Home Sentinel already passes `gateway.Operation{ExecutionID, IdempotencyKey}` to door, siren and camera physical gateways, and their fakes deduplicate confirmed provider effects. What is still missing is a deterministic end-to-end fault proof of the exact crash window.
+Pinned ADGO `PebbleStore` explicitly owns a process-level database lock. T-006 will use that property to make the supported topology mechanically true:
+- canonicalize one runtime root per installation;
+- acquire a dedicated process-lifetime writer lock under that root before application DB migration/service initialization;
+- fail a concurrent second writer closed before services become available;
+- keep the lock for the entire App lifetime and release it on normal or partial-startup cleanup;
+- prove cross-process exclusion and reacquisition using deterministic subprocess handshake, not sleeps;
+- document multiple independent roots controlling the same devices as unsupported;
+- keep distributed multi-writer mode deferred until it has real fencing semantics.
 
-T-005 will use public pinned ADGO Store/Pebble/Engine contracts plus Home Sentinel plans/registries to:
-- fail exactly the activity completion commit after the fake provider has physically applied the effect;
-- preserve the underlying Pebble running task and original idempotency key;
-- close/reopen durable state and deterministically expire the lease without sleeps;
-- redeliver from a new engine/coordinator and prove identical idempotency identity;
-- prove one physical application for door, siren and camera reconnect;
-- prove unknown provider outcomes remain explicit ambiguous/reconciliation paths and are not blindly replayed.
-
-The Stage17 durable Telegram notifier already has its own persistent `prepared -> sending -> applied/ambiguous` crash protocol and is not duplicated by this slice.
-
-If T-005 remains genuinely `_test.go`-only, engineering-loop mutation targeting is expected to select no production target. This is intentional: I-018 forbids zero-mutant evidence only when a critical production target was actually selected; no semantic-neutral production refactor will be added just to manufacture mutation statistics.
+T-006 production code will live under `internal/orchestration/topology` so the existing orchestration mutation-critical policy applies. Gremlins must generate non-empty clean evidence for the production slice.
 
 ## Stage 17 residuals
 
 T-013 callback HTTP READY; T-014 principal kinds TODO; T-015 authz audit/limiting BLOCKED; T-016 command preconditions TODO; T-017 authenticator boundary BLOCKED.
 
-## Other P0 work
+## Other work
 
-T-006 topology/fencing and T-009 release qualification remain P0. T-010 verified-main guard remains planned; T-008 owns target-hardware performance budgets.
+T-006 topology/fencing and T-009 release qualification are P0. T-010 verified-main guard is planned; T-008 owns target-hardware performance budgets.

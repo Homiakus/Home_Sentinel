@@ -1,14 +1,14 @@
 # Home Sentinel — Living MASTER PLAN
 
-> Single execution source of truth for progressive audit, atomic implementation and verified direct-to-main delivery. Detailed architecture/product plans remain intent specifications; this file owns findings, invariants, ordering and execution state.
+> Single execution source of truth for progressive audit, atomic implementation and verified direct-to-main delivery. Detailed product/architecture documents remain intent specifications; this file owns findings, invariants, ordering and execution state.
 
-**Plan revision:** 2026-08-29 / T-024 verified on `6a2be3eddd54aff6a69ee1693b2034fbe92d910d`; F-017 and durable-upgrade umbrella T-004 are resolved; T-005 crash/restore external-effect linearization is the active P0 slice.
+**Plan revision:** 2026-08-29 / T-005 verified on `2e8b9606212f47bf04d66bf5f1833a52195b7018`; crash/restore external-effect linearization is resolved. F-018 / T-006 single-writer topology is the active P0 slice.
 
 ---
 
 # 1. Mission
 
-Deliver a production-grade local security/automation platform via small reviewable changes while preserving fail-closed authority, durable external-effect semantics, reproducibility, rollback and evidence-driven evolution.
+Deliver a production-grade local security/automation platform through small reviewable changes while preserving fail-closed authority, durable external-effect semantics, reproducibility, rollback and evidence-driven evolution.
 
 `AUDIT -> PLAN -> SELECT -> CHARACTERIZE -> IMPLEMENT -> TEST -> SELF-REVIEW -> RECONCILE -> COMMIT -> PUSH main -> VERIFY -> COMPRESS -> NEXT`
 
@@ -16,15 +16,12 @@ Unexpected material discoveries are recorded before implementation scope expands
 
 # 2. Current State
 
-- Go control plane: typed domain/events, Axiom lifecycle, ADGO durable workflows, auth/authz, SQLite state, gateways/recovery and Scenario compiler/safety/catalog/simulator.
-- Verified tasks: T-001, T-002, T-003, T-004, T-011, T-012, T-018, T-019, T-020, T-021, T-022, T-023, T-024.
-- Complete ADGO inventory is incident, siren action, door action and camera recovery; every family now has an explicit durable execution-bundle evolution boundary.
-- T-021 retains incident v1/v2 plan + handler + callback/human binding semantics.
-- T-022 reconstructs configuration-derived siren historical bundles and preserves timer/cancel/compensation behavior across restart plus configuration change.
-- T-023 freezes door v1 graph/handlers/human+reconciliation bindings and routes persisted work by exact bundle identity.
-- T-024 freezes camera v1 graph/handlers/operator binding, routes persisted work through Axiom Host, validates Open/Serve fail-closed, and proves Pebble restart plus retained-v1/future-active coexistence.
-- T-024 final evidence on `6a2be3ed...`: module/vulnerability/format/vet/unit/race/reconciliation/benchmark PASS; security/SBOM/Trivy PASS; Gremlins 52 killed, 0 lived, 0 not-covered, 0 timeout, efficacy and mutator coverage 100%.
-- Pinned ADGO explicitly provides at-least-once external work, persists task + idempotency key before provider invocation, and permits redelivery when a provider accepted an effect but the process died before completion commit. T-005 now owns Home Sentinel’s deterministic proof of that crash window for physical effects.
+- Go control plane: typed domain/events, Axiom lifecycle, ADGO durable workflows, auth/authz, SQLite state, gateways/recovery, Scenario compiler/safety/catalog/simulator.
+- Verified tasks: T-001, T-002, T-003, T-004, T-005, T-011, T-012, T-018, T-019, T-020, T-021, T-022, T-023, T-024.
+- Every ADGO workflow family has an explicit execution-bundle evolution boundary: incident, configuration-derived siren, fixed-version door, fixed-version camera.
+- T-005 now proves the exact ADGO at-least-once crash window `provider accepted effect -> completion commit lost` for door/siren/camera with deterministic Pebble restart/lease recovery and preserved idempotency identity.
+- T-005 final evidence on `2e8b9606...`: module/supply-chain/vulnerability/format/vet/unit/race/reconciliation/benchmark PASS; security/SBOM/Trivy PASS; engineering-loop classifies the slice CRITICAL while correctly selecting no mutation target because the final implementation is `_test.go`-only.
+- T-006 owns the remaining physical-control topology boundary: current `resourceguard.Check + StartOrLoad` is serialized only inside one process. v1 will technically support exactly one control-plane writer per canonical runtime root and fail a second writer before application services become available.
 - Local full module execution is unavailable in this agent environment due dependency-network resolution; GitHub Actions remains authoritative.
 
 # 3. Architecture Map
@@ -43,9 +40,10 @@ Media / sensors -> typed evidence/events
                        external/physical IO
 
 SQLite      : app/auth/audit + schema_migrations
-ADGO/Pebble : Execution PlanID/PlanVersion/PlanDigest + durable tasks/history
-Axiom Host  : multi-plan engine registry/routing by persisted digest
-Bundle      : immutable plan + versioned handlers + external bindings/config semantics
+ADGO/Pebble : pinned execution identity + durable tasks/history
+Axiom Host  : multi-plan routing by persisted digest
+Bundle      : immutable graph + handlers + external bindings/config semantics
+Topology    : one v1 control-plane writer per canonical runtime root
 Scenario    : AST -> validation -> Safety Compiler -> lowering -> catalog/simulator
 ```
 
@@ -58,7 +56,7 @@ Primary boundaries: `internal/domain`, `internal/orchestration`, `internal/gatew
 | module/build hygiene | PASS |
 | vulnerability/static | PASS |
 | formatting/vet | PASS |
-| unit/integration | PASS |
+| unit/integration/fault | PASS |
 | race | PASS; no active unexplained flake |
 | security/SBOM/Trivy | PASS |
 | config critical mutation | PASS, non-empty killed evidence |
@@ -66,6 +64,7 @@ Primary boundaries: `internal/domain`, `internal/orchestration`, `internal/gatew
 | siren durable-upgrade mutation | PASS, 68/68 killed |
 | door durable-upgrade mutation | PASS, 46/46 killed |
 | camera durable-upgrade mutation | PASS, 52/52 killed |
+| external-effect crash proof | PASS on `2e8b9606...` |
 | benchmark smoke | PASS |
 | target-hardware performance | OPEN T-008 |
 
@@ -89,12 +88,13 @@ Primary boundaries: `internal/domain`, `internal/orchestration`, `internal/gatew
 - **I-016** Safety/control orchestration and engineering gate-policy code are mutation-critical.
 - **I-017** Existing ADGO executions run only against their pinned PlanID/PlanDigest; active plan changes never silently reinterpret durable state.
 - **I-018** A CRITICAL mutation campaign with selected production targets is invalid when Gremlins generates zero mutants.
-- **I-019** Durable workflow identity pins an execution bundle: plan graph, version-specific handler semantics and external signal/human bindings.
+- **I-019** Durable workflow identity pins an execution bundle: plan graph, version-specific handlers and external signal/human bindings.
 - **I-020** Unknown persisted non-terminal plan/bundle identity fails startup/control-plane qualification closed.
-- **I-021** Configuration-derived durable plans that own physical effects must be reconstructible and routable by persisted identity across restart.
-- **I-022** A fixed-version durable workflow has an immutable-bundle release boundary before semantic v2: graph, handlers and bindings are retained together.
-- **I-023** ADGO external effects are at-least-once: after `provider accepted -> completion commit lost`, recovery may redeliver only with the same durable idempotency identity, and Home Sentinel must prove the physical effect is not applied twice or else enter explicit reconciliation.
-- **I-024** Crash/fault tests must control commit/lease boundaries deterministically; process sleeps, scheduler luck and timing inflation are not crash-linearization evidence.
+- **I-021** Configuration-derived durable plans owning physical effects are reconstructible/routable by persisted identity across restart.
+- **I-022** A fixed-version durable workflow has an immutable-bundle release boundary before semantic v2.
+- **I-023** ADGO external effects are at-least-once: after `provider accepted -> completion commit lost`, recovery may redeliver only with the same durable idempotency identity; otherwise explicit reconciliation is required.
+- **I-024** Crash/fault tests control commit/lease/timer boundaries deterministically; process sleeps and scheduler luck are not correctness evidence.
+- **I-025** Supported v1 physical topology has exactly one Home Sentinel control-plane writer per canonical runtime root. A second writer must fail before application/runtime services are exposed. Multi-writer operation requires explicit distributed fencing and is not inferred from process-local mutexes or expiring admission leases.
 
 # 6. Findings Registry
 
@@ -143,24 +143,29 @@ Primary boundaries: `internal/domain`, `internal/orchestration`, `internal/gatew
 ## F-015 — Pinned incident plan could execute with drifted handlers/bindings
 **Status:** Resolved | **Severity:** Critical | **Confidence:** Confirmed | T-021.
 
-Incident v1/v2 retain immutable plan + version-specific Registry/handlers + signal/human bindings and exact persisted-digest routing. Final `8b13e556...`: Gremlins 69/69 killed and full gates PASS.
-
 ## F-016 — Config-derived siren plan could strand an enabled physical effect across restart
 **Status:** Resolved | **Severity:** Critical | **Confidence:** Confirmed | T-022.
-
-Canonical duration reconstruction, exact identity validation, Host routing and historical Stop/compensation recovery are verified. Final `dfced327...`: Gremlins 68/68 killed and full gates PASS.
 
 ## F-017 — Door/camera fixed-version services lacked a first-v2 retained-bundle boundary
 **Status:** Resolved | **Severity:** Critical | **Confidence:** Confirmed | T-023 + T-024.
 
-Door v1 is frozen at `sha256:ca5201ec70e540f7323176f4a2ca156c9c6a373bd35a664d33c0178b51cd6880`; camera v1 is frozen at `sha256:a0781f96957948af4ea5535c04f1a00ffffa40653c55cd0ed8ea0cfbcd20706f`. Both route non-terminal operations by persisted bundle identity, fail Open/preflight closed on unknown/mismatched state, preserve terminal history, and prove retained-v1 coexistence with a distinct test future-active bundle without shipping a fake production v2. Door final evidence: 46/46 mutants killed. Camera final evidence on `6a2be3ed...`: 52/52 killed; full CI/race/security PASS.
+## F-018 — Physical-resource admission is only process-local
+**Status:** Active | **Severity:** Critical | **Confidence:** Confirmed | **Task:** T-006.
+
+**Evidence:** `internal/orchestration/resourceguard.Check` explicitly requires callers to serialize `Check + StartOrLoad` within one process and states that multi-process control planes need distributed admission/fencing. Door/siren/camera services use process-local `sync.Mutex` around this admission sequence. Pinned ADGO exposes durable `AdmissionController`, but Home Sentinel physical services do not use it. Pinned ADGO Pebble explicitly owns a process-level database lock.
+
+**Root cause:** durable execution ownership is checked through persisted state, but admission of a *new* conflicting execution is not atomic across two Home Sentinel processes. Two writers can both observe “free” before either creates its durable reservation.
+
+**Blast radius:** physical door commands, siren activation, camera recovery and any future actuator using the same `resourceguard` pattern. An unsupported multi-process deployment could create conflicting durable physical owners.
+
+**Decision:** v1 supports one control-plane writer per canonical runtime root, enforced by a process-lifetime Pebble lock acquired before application services initialize. Expiring admission TTL is not treated as whole-execution fencing because human/reconciliation waits can outlive it. Distributed multi-writer fencing is explicitly deferred until it has a non-expiring/heartbeated ownership protocol with device-level topology semantics.
 
 # 7. Risk Register
 
 | Risk | Severity | Control |
 |---|---|---|
-| provider accepted physical effect but ADGO completion commit is lost | Critical | T-005 ACTIVE |
-| multi-process physical write race | Critical | T-006 |
+| provider accepted physical effect but completion commit lost | Critical | T-005 DONE |
+| two control-plane writers admit conflicting physical owners | Critical | T-006 ACTIVE |
 | callback transport absent | High | T-013 |
 | machine/human principal ambiguity | High | T-014 |
 | stale/duplicate HTTP command | High | T-016 |
@@ -169,7 +174,7 @@ Door v1 is frozen at `sha256:ca5201ec70e540f7323176f4a2ca156c9c6a373bd35a664d33c
 
 # 8. Pareto Improvements
 
-1. T-005/T-006 prove external-effect crash linearization and supported single-writer/fencing topology.
+1. T-006 technically enforces the supported physical-control topology.
 2. T-013/T-014 establish callback transport and machine-vs-human authority.
 3. T-016 adds common command preconditions/idempotency.
 4. T-015/T-010 tighten audit/abuse/main protection.
@@ -181,8 +186,7 @@ Door v1 is frozen at `sha256:ca5201ec70e540f7323176f4a2ca156c9c6a373bd35a664d33c
 T-001 DONE -> T-002 DONE -> T-011 DONE -> T-003 DONE
                                       |-> T-012 DONE -> T-018 DONE -> T-013 READY
                                       |-> T-019 DONE -> T-020 DONE -> T-021 DONE -> T-022 DONE -> T-023 DONE -> T-024 DONE -> T-004 DONE
-                                      |                                                                                             |-> T-005 ACTIVE
-                                      |                                                                                             |-> T-006
+                                      |                                                                                             |-> T-005 DONE -> T-006 ACTIVE
                                       |-> T-014 -> T-015 / T-017
                                       |-> T-016
 T-001 -> T-010
@@ -194,51 +198,47 @@ T-004 + T-005 + T-006 + T-008 -> T-009
 # 10. Implementation Phases
 
 - **A Truth/gates:** T-001/T-002/T-003/T-011/T-012/T-018/T-019/T-020 DONE; T-010 remains.
-- **B Durable control:** T-004/T-021/T-022/T-023/T-024 DONE -> T-005 ACTIVE -> T-006; T-013..T-017 in parallel dependency order.
+- **B Durable control:** T-004/T-005/T-021/T-022/T-023/T-024 DONE -> T-006 ACTIVE; T-013..T-017 in dependency order.
 - **C Product surface:** T-007.
 - **D Qualification:** T-008/T-009.
 
 # 11. Atomic Tasks
 
-## T-001/T-002/T-003/T-004/T-011/T-012/T-018/T-019/T-020/T-021/T-022/T-023/T-024
+## T-001/T-002/T-003/T-004/T-005/T-011/T-012/T-018/T-019/T-020/T-021/T-022/T-023/T-024
 **Status:** DONE. Verified commits/evidence recorded below.
 
-## T-004 — Pin durable workflow execution semantics across upgrade
-**Status:** DONE | **Priority:** P0
-
-All ADGO families are inventoried and have a verified evolution boundary: incident v1/v2 retained bundles, reconstructible siren configuration-derived bundles, immutable door v1 and immutable camera v1. Unknown/mismatched non-terminal identities fail closed, terminal historical records remain readable, and future-active coexistence is proven without fake production versions.
-
 ## T-005 — Prove crash/restore external-effect linearization
-**Status:** ACTIVE | **Priority:** P0 | **Type:** PHYSICAL EFFECT / DURABILITY | **Risk:** CRITICAL | Depends T-004.
+**Status:** DONE | **Priority:** P0 | **Final verified SHA:** `2e8b9606212f47bf04d66bf5f1833a52195b7018`.
+
+Deterministic fault tests now fail exactly the post-provider completion commit, preserve the running durable task/idempotency key, restart Pebble, force lease recovery without sleeps and verify safe redelivery. Door suppresses the duplicate by observed desired state; camera redelivers the same key and provider deduplicates; siren suppresses duplicate enable then independently performs one controlled safety-disable; unresolved ambiguous door outcome remains human/reconciliation without blind replay. Final full CI/race/security PASS. Production semantics were unchanged, so mutation targeting correctly selected no production target.
+
+## T-006 — Enforce supported single-writer physical topology
+**Status:** ACTIVE | **Priority:** P0 | **Type:** PHYSICAL OWNERSHIP / TOPOLOGY | **Risk:** CRITICAL | Depends T-004/T-005.
 
 ### Characterization
-- pinned ADGO contract is explicitly at-least-once, not exactly-once;
-- coordinator durably enqueues task + `IdempotencyKey` before worker invocation;
-- activity completion atomically commits result/node/facts/history; if that commit is lost, redelivery is legal;
-- ADGO explicitly names the critical window `provider accepted effect -> process died before ADGO commit` and requires provider idempotency or explicit reconciliation;
-- door, siren and camera physical gateways already receive `gateway.Operation{ExecutionID, IdempotencyKey}`; their fakes deduplicate confirmed effects by idempotency key;
-- incident Telegram notifier already has a separate Stage17 durable receipt state machine proving `sending` crash/reopen becomes ambiguous without blind resend; T-005 therefore focuses on door/siren/camera physical workflow integration.
+- `resourceguard.Check` reserves a physical resource through non-terminal durable execution state but its `Check + StartOrLoad` admission is only process-locally serialized;
+- door/siren/camera each rely on process-local `startMu` around that sequence;
+- two processes can race before either durable execution exists;
+- ADGO `Production.Admission` is available but an expiring permit is not sufficient whole-execution fencing for human/reconciliation waits without a dedicated heartbeat/ownership lifecycle;
+- pinned ADGO `PebbleStore` documents a process-level database lock held for the DB lifetime.
 
 ### Goal
-Build deterministic fault tests that lose the ADGO completion commit only after a physical provider has accepted/applied the effect, restart durable orchestration over the same state, force lease recovery without wall-clock sleeps, and prove redelivery preserves the original idempotency identity so physical application occurs at most once. Where the provider outcome cannot be proven, recovery must remain in explicit ambiguous/reconciliation state rather than blind replay.
+Make supported v1 deployment topology mechanically true: only one Home Sentinel control-plane writer may own a canonical runtime root at a time. The guard must be acquired before application services are initialized and held until application shutdown. Multi-writer/distributed mode remains explicitly unsupported until a real fencing protocol exists.
 
 ### Preferred implementation
-Use the public pinned ADGO `Store`/`PebbleStore`/`NewEngine` contracts and Home Sentinel’s compiled plans/registries. A test-only Store decorator may fail the selected completion `Commit` after observing provider application; the underlying Pebble state remains at the durable running task. Reopen Pebble/new engine, deterministically expire the persisted lease via a controlled state mutation, then recover/redeliver. Do not add production refactors merely to generate mutation targets.
+Add a small production package under `internal/orchestration/topology` that canonicalizes the runtime root and opens a dedicated Pebble lock database such as `<runtime-root>/control-plane-writer`. Integrate acquisition at the beginning of `app.Open`, before database migration/service startup; store the guard on `App`; release it last from `App.Close`, including partial-startup cleanup. Do not use stale PID files or expiring TTL leases as fencing.
 
 ### Acceptance
-- deterministic fault injector distinguishes enqueue/claim/provider-call/completion-commit and fails exactly the post-provider completion commit;
-- test proves the provider was applied once before the lost commit and the durable task still carries the same non-empty idempotency key;
-- after Pebble close/reopen and deterministic lease expiry, a new engine/coordinator redelivers with the identical idempotency key;
-- door recovery reaches the correct final lock state with physical `Applied==1`; no second physical application occurs;
-- the crash-recovered siren enable is physically applied exactly once; a later safety-disable is a distinct expected physical effect that must also occur at most once, leaving the siren disabled without weakening cancellation/compensation safety;
-- camera reconnect recovery reaches a verified stream state with one physical reconnect application;
-- ambiguous outcome paths do not automatically replay an effect whose application is unknown; they remain explicit reconciliation/human-safe according to each workflow contract;
-- no `time.Sleep`, inflated timeout or scheduler-probability assertion is used as crash evidence;
-- full static/unit/fault/race/replay/security gates PASS;
-- if production critical `.go` semantics change, Gremlins must produce non-empty clean evidence; if the slice is genuinely `_test.go`-only, mutation planner must select no production target rather than manufacturing a refactor solely for mutation numbers.
-
-## T-006 — Supported topology/fencing
-**Status:** TODO | **Priority:** P0 | Depends T-004 relevant surfaces.
+- canonical runtime root is stable for relative/absolute aliases and invalid/empty roots fail closed;
+- first process/app acquires the writer guard; a concurrent second process using the same canonical root fails before DB/service availability;
+- lock remains held through the whole App lifetime, including human/reconciliation waits in downstream workflows;
+- `Close` releases ownership and a subsequent process can acquire the same root;
+- partial `app.Open` failure after lock acquisition releases the guard;
+- subprocess test proves cross-process exclusion deterministically using handshake/IPC, not sleeps;
+- docs explicitly state one canonical runtime root per installation and do not claim different roots controlling the same devices are safe;
+- distributed multi-writer mode remains unsupported; ADGO TTL admission is not misrepresented as device fencing;
+- production topology code is mutation-critical and Gremlins must produce non-empty clean evidence;
+- full module/static/unit/fault/race/replay/security/benchmark gates PASS.
 
 ## T-007 — Authenticated Scenario API
 **Status:** BLOCKED | **Priority:** P1.
@@ -269,89 +269,82 @@ Use the public pinned ADGO `Store`/`PebbleStore`/`NewEngine` contracts and Home 
 
 # 12. Testing Strategy
 
-G0 build/static/module; G1 unit/golden; G2 property/fuzz/model; G3 race; G4 contract/integration; G5 fault/crash; G6 mutation; G7 E2E/HIL/UX; G8 performance/soak/release.
+G0 build/static/module; G1 unit/golden; G2 property/fuzz/model; G3 race; G4 contract/integration; G5 fault/crash/topology; G6 mutation; G7 E2E/HIL/UX; G8 performance/soak/release.
 
-Critical edge space: `input x identity x authority x time x ordering x concurrency x persistence x external failure x ownership x topology x plan-version x handler-version x config-derived-version x signal/human-binding x task-state x lease-state x provider-acceptance x completion-commit x cancellation x compensation x recovery x gate-classification x evidence-emptiness`.
+Critical edge space: `input x identity x authority x time x ordering x concurrency x process-count x runtime-root-alias x persistence x external failure x physical ownership x topology x plan-version x task-state x lease-state x provider-acceptance x completion-commit x cancellation x compensation x recovery x gate-classification x evidence-emptiness`.
 
 # 13. Mutation Testing Strategy
 
 - Critical changed production semantics require real Gremlins execution and non-empty generated evidence.
 - `MutantsTotal==0` is failure when selected critical production targets exist.
-- `_test.go` files are intentionally excluded from mutation targets; a test-only critical fault-verification slice may legitimately have no mutation target.
-- Never add a semantic-neutral production refactor solely to make a test-only slice produce mutants.
-- Config, orchestration, engloop, principal policy, command preconditions, migration guards and physical gateways remain mutation-critical whenever their production code changes.
-- Equivalent representation branches should be removed rather than suppressed; lived/not-covered/timeout mutants require contract analysis.
+- `_test.go` files are excluded from mutation targets; test-only critical fault slices may legitimately have no mutation target.
+- Never add semantic-neutral production code only to manufacture mutants.
+- Config, orchestration, topology, engloop, principal policy, command preconditions, migration guards and physical gateways are mutation-critical whenever production code changes.
+- Lived/not-covered/timeout mutants require contract analysis; equivalent branches should be simplified rather than suppressed.
 
 # 14. Performance Baselines
 
-Benchmark smoke is regression smoke only. T-008 owns target-hardware latency/throughput/allocation budgets.
+Benchmark smoke is regression smoke only. T-008 owns target-hardware latency/throughput/allocation budgets. T-006 writer-lock acquisition is startup-only and must not enter per-request/per-effect hot paths.
 
 # 15. Security Hardening
 
-Source-state hygiene DONE; deterministic siren test DONE; Stage17 truth DONE; remote plaintext guard DONE; config mutation boundary DONE; orchestration taxonomy DONE; zero-evidence guard DONE; incident bundles DONE; siren config-drift recovery DONE; door v1 bundle boundary DONE; camera v1 bundle boundary DONE. Next: physical crash linearization -> fencing/topology -> callback/principal/preconditions -> main/release qualification.
+Source-state hygiene DONE; deterministic safety tests DONE; Stage17 truth DONE; remote plaintext guard DONE; config mutation boundary DONE; orchestration taxonomy DONE; zero-evidence guard DONE; durable execution bundles DONE; deterministic physical crash linearization DONE. Next: single-writer topology -> callback/principal/preconditions -> main/release qualification.
 
 # 16. Migration Strategy
 
 `characterize old semantics -> pin immutable historical execution bundle -> introduce active new bundle only for a real semantic change -> route existing state by durable identity -> explicit migration only at safe/quiescent point -> verify restart/rollback -> retire old bundle only after no durable references remain`.
 
-For config-derived plans, parsed configuration, canonical version and recompiled digest must agree. For fixed-version plans, a semantic graph/handler change requires a version bump and retained old bundle in the same release; golden digest drift under the same version is a test failure.
+Topology migration rule: a v1 installation has one canonical runtime root and one control-plane writer. Multi-writer deployment is a future explicit migration requiring a real distributed fencing contract, not a configuration toggle around current process-local admission.
 
 # 17. Deferred Work
 
-Broad Scenario UI/UX; full TLS listener/cert lifecycle; OIDC/mTLS implementations; multi-node mode beyond explicit v1 topology; low-leverage refactors.
+Broad Scenario UI/UX; full TLS listener/cert lifecycle; OIDC/mTLS implementations; distributed multi-writer physical control; low-leverage refactors.
 
 # 18. Rejected Decisions
 
 - roadmap checkbox as proof;
 - green rerun as flake resolution;
-- safety timeout inflation;
+- timeout inflation as safety evidence;
 - callback HTTP before remote plaintext is impossible;
-- ADGO semantic idempotency as HTTP idempotency;
-- service/system as fake users;
-- unused TLS fields as security;
-- mutation request without selected target as evidence;
-- selected production target with zero generated mutants as evidence;
-- production refactor added only to force mutation evidence for a test-only task;
+- ADGO workflow idempotency as HTTP idempotency;
+- service/system principals as fake users;
+- selected production mutation target with zero generated mutants as evidence;
+- production refactor added only to force mutation evidence for test-only work;
 - automatic plan substitution/migration on startup;
-- pinning only the DAG while reusing drifted current handlers;
+- pinning only DAG while reusing drifted handlers;
 - silently ignoring unknown non-terminal plan digests;
-- treating current runtime config as permission to reinterpret historical physical state;
-- creating a fake v2 only to exercise upgrade plumbing;
-- changing a fixed-version plan/handler bundle without version bump + retained old bundle;
-- suppressing an equivalent mutation when the unobservable representation branch can be removed;
-- time-based crash tests when commit/lease state can be controlled directly;
+- treating current config as permission to reinterpret historical physical state;
+- changing fixed-version semantics without version bump + retained bundle;
+- sleep-based crash tests when durable state can be controlled;
 - claiming exactly-once from ADGO task state;
-- reimplementing Axiom Host/migration logic;
+- assuming process-local `sync.Mutex` is distributed fencing;
+- using expiring admission TTL as whole-execution ownership without heartbeat/lifecycle proof;
+- stale PID files as safety fencing;
+- claiming multiple runtime roots controlling the same physical devices are safe;
 - force push.
 
 # 19. Completed Tasks
 
-T-001, T-002, T-003, T-004, T-011, T-012, T-018, T-019, T-020, T-021, T-022, T-023, T-024.
+T-001, T-002, T-003, T-004, T-005, T-011, T-012, T-018, T-019, T-020, T-021, T-022, T-023, T-024.
 
 # 20. Iteration Log
 
-- **1 T-001** `905862f...`: ci/security/mutation PASS.
-- **2 T-002** `745f194...`: DB hygiene; F-005 discovered; final PASS.
-- **3 F-005 plan** `c30b395...`: PASS.
-- **4 T-011** `5ccff8bf...`: deterministic siren test; first-attempt PASS.
-- **5 T-003** `ef8ecaf...`: Stage17 reconciliation; PASS.
-- **6 T-012** `d57f239...`: ci/security PASS; mutation setup exposed F-012.
-- **7 T-018** `26b28f...`: config mutation boundary; Gremlins 1/1 killed; all gates PASS.
-- **8 F-013 plan/closure** `aaafae7...`: planning gates PASS.
-- **9 T-019** `6b55fe38...`: ci/race/security PASS; zero-mutant result exposed F-014.
-- **10 F-014 planning** `a69bc45...`: finding/work packet recorded.
-- **11 T-020** `36d4847...`: Gremlins 2/2 killed; closes F-013/F-014 and T-019/T-020.
-- **12-17 T-021** planning/runtime/recovery through `8b13e556...`: incident v1/v2 execution bundles; final full gates PASS; Gremlins 69/69; closes F-015.
-- **18-20 T-022** planning/runtime/recovery through `dfced327...`: siren config-derived historical bundles; final full gates PASS; Gremlins 68/68; closes F-016.
-- **21 F-017/T-023 planning** `74341a52...`: complete ADGO inventory and preventive fixed-version boundary recorded.
-- **22 T-023 runtime** `e996c4cd...`: door frozen v1 handlers/digest + Host routing + Pebble tests; mutation exposed one equivalent nil-vs-empty representation survivor.
-- **23 T-023 recovery** `a130177e...`: full CI/race/security PASS; Gremlins 46/46 killed; T-023 done.
-- **24 T-023 closure / T-024 planning** `fcb1bbe8...`: T-023 reconciled DONE, camera golden identity/work packet activated; planning CI/race/security PASS.
-- **25 T-024 runtime** `7ee654fc...`: frozen camera v1 bundle + Host routing + Open/Serve/Pebble tests; security/format/vet/unit PASS; Gremlins 50 killed with one NOT COVERED Start guard and one TIMED OUT Serve-preflight mutant.
-- **26 T-024 testability recovery** `dd14a4de...`: targeted Start/Serve mutation observability added; introduced variadic/non-variadic `ServeResilient` assignment compile defect was caught by govulncheck package loading and classified as introduced, not retried blindly.
-- **27 T-024 final recovery** `6a2be3ed...`: exact Serve adapter fix; module/vulnerability/format/vet/unit/race/reconciliation/benchmark PASS; security/SBOM/Trivy PASS; Gremlins 52/52 killed, no blockers, 100% efficacy/coverage. Closes T-024, F-017 and T-004.
-- **28 T-005 characterization:** pinned ADGO contract confirms durable task/idempotency before invoke, at-least-once redelivery after lost completion commit, fencing on stale attempts and explicit ambiguous-side-effect reconciliation; activate deterministic physical crash-window proof.
+- **1 T-001** `905862f...`: master plan; ci/security/mutation PASS.
+- **2 T-002** `745f194...`: runtime DB hygiene; F-005 discovered.
+- **3 F-005** `c30b395...`: finding reconciliation.
+- **4 T-011** `5ccff8bf...`: deterministic siren compensation test; PASS.
+- **5 T-003** `ef8ecaf...`: Stage17 evidence reconciliation; PASS.
+- **6-11 T-012/T-018/T-019/T-020** through `36d4847...`: runtime plaintext guard, mutation taxonomy and zero-evidence fail-closed; PASS.
+- **12-17 T-021** through `8b13e556...`: incident bundles; Gremlins 69/69; PASS.
+- **18-20 T-022** through `dfced327...`: siren config-derived bundles; Gremlins 68/68; PASS.
+- **21-23 T-023** through `a130177e...`: door retained v1 bundle; Gremlins 46/46; PASS.
+- **24-27 T-024** through `6a2be3ed...`: camera retained v1 bundle; one intermediate compile defect caught by package loading; final Gremlins 52/52 and full gates PASS.
+- **28 T-005 plan** `1d1fa6a...`: T-004 closure + crash-proof packet activated; planning gates PASS.
+- **29 T-005 scope** `5f4ea581...`: siren acceptance corrected to distinguish enable from later safety-disable; planning gates PASS.
+- **30 T-005 fault proof** `bf04ca4a...`: door/camera/ambiguity evidence passed; unit exposed a siren test-model assumption that `RunLocal` would complete a future timer. Classified as test-model defect, not rerun.
+- **31 T-005 recovery** `2e8b9606...`: persisted timer is deterministically made due; module/supply-chain/vulnerability/format/vet/unit/race/reconciliation/benchmark and security/SBOM/Trivy PASS; test-only mutation classification is correct. T-005 DONE.
+- **32 F-018/T-006 characterization:** process-local `resourceguard.Check + StartOrLoad` cannot support two control-plane writers; v1 single-writer process-lifetime topology selected.
 
 # 21. Definition of Final Done
 
-No unresolved Critical/High findings without accepted deferral; all P0/P1 acceptance verified; remote exposure safe; critical production test-of-tests has selected targets and non-empty clean mutation evidence; explicit principal kinds; durable plan+handler+binding/config evolution and restart/rollback; deterministic external-effect crash/fencing tests; stale/idempotency HTTP contracts; security/race/static/fault/mutation green; hardware budgets met; no unexplained flakes; docs match code; final re-audit finds no fundamental blocker; last verified state is main with no force push.
+No unresolved Critical/High findings without accepted deferral; all P0/P1 acceptance verified; remote exposure safe; critical production test-of-tests has selected targets and non-empty clean mutation evidence; explicit principal kinds; durable plan+handler+binding/config evolution and restart/rollback; deterministic external-effect crash/fencing tests; supported topology technically enforced; stale/idempotency HTTP contracts; security/race/static/fault/mutation green; hardware budgets met; no unexplained flakes; docs match code; final re-audit finds no fundamental blocker; last verified state is main with no force push.

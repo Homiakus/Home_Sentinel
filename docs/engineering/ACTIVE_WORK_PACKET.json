@@ -1,5 +1,5 @@
 {
-  "packet": "docs/engineering/work-packets/t005-external-effect-crash-linearization.json",
-  "mutation_base": "6a2be3eddd54aff6a69ee1693b2034fbe92d910d",
-  "max_commits": 6
+  "packet": "docs/engineering/work-packets/t006-single-writer-topology.json",
+  "mutation_base": "2e8b9606212f47bf04d66bf5f1833a52195b7018",
+  "max_commits": 5
 }
