@@ -1,5 +1,5 @@
 {
-  "packet": "docs/engineering/work-packets/t022-siren-config-drift-bundles.json",
-  "mutation_base": "8b13e5565590ac1d86f1e4ea7d9c8213542022fb",
+  "packet": "docs/engineering/work-packets/t023-door-v1-execution-bundle.json",
+  "mutation_base": "dfced3277a61211ae312b8eef18e761b980a9238",
   "max_commits": 5
 }

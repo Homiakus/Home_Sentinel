@@ -1,0 +1,54 @@
+{
+  "plan_item": "T-023",
+  "intent": "Establish an immutable door v1 execution-bundle release boundary before any future semantic v2 so persisted access-control work remains routable by exact identity and unknown non-terminal state fails closed.",
+  "status_before": "OPEN",
+  "risk_class": "CRITICAL",
+  "invariants": [
+    "Current door v1 PlanID, PlanVersion and PlanDigest are an immutable release identity; semantic plan or handler changes under the same identity are rejected by tests.",
+    "Every non-terminal persisted door execution is dispatched only to the execution bundle matching its PlanDigest and version-specific human/reconciliation bindings.",
+    "New door executions start only on the active bundle.",
+    "Unknown or mismatched non-terminal door bundle identity fails Open or Serve preflight closed.",
+    "Terminal historical door records do not require executable retained bundles and do not block startup.",
+    "Unlock approval and ambiguous-side-effect reconciliation resolve through the persisted execution bundle, never unconditional current-plan engine/constants.",
+    "A future distinct active bundle can coexist with retained v1 through Axiom Host without introducing a fake semantic v2 in production today.",
+    "Resource ownership and external-effect idempotency remain preserved across restart and bundle routing."
+  ],
+  "contracts": [
+    "repository history characterization confirms no semantic door predecessor beyond current v1 and formatting normalization",
+    "golden door v1 digest is deterministic on the pinned Axiom revision",
+    "bundle metadata pins plan, Registry/handlers and unlock/reconciliation node bindings",
+    "Axiom Host owns active and retained engines over the existing Production Store/Router",
+    "Start uses active bundle while Drive and human/reconciliation operations resolve persisted identity first",
+    "Open or synchronous Serve preflight validates every non-terminal persisted door execution",
+    "an internal constructor/test seam can register retained v1 plus a distinct test active bundle without changing public production semantics"
+  ],
+  "code_surfaces": [
+    "internal/orchestration/action/door/plan.go",
+    "internal/orchestration/action/door/handlers.go",
+    "internal/orchestration/action/door/service.go",
+    "internal/orchestration/action/door/*bundle*",
+    "internal/orchestration/action/door/*upgrade*",
+    "internal/orchestration/action/door/*test*"
+  ],
+  "required_gates": [
+    "static",
+    "unit",
+    "property",
+    "race",
+    "contract",
+    "fault",
+    "mutation-critical",
+    "replay",
+    "security"
+  ],
+  "acceptance_evidence": [
+    "golden v1 identity test fails on plan digest drift",
+    "memory or Pebble test proves current v1 Start/Drive behavior remains unchanged",
+    "Pebble restart preserves a waiting unlock approval and resolves it through the matching bundle without duplicate physical action",
+    "ambiguous-side-effect reconciliation after restart resolves through the matching bundle",
+    "unknown/mismatched non-terminal persisted digest fails closed while terminal history does not block startup",
+    "internal multi-bundle test proves retained v1 and distinct future-active bundle can coexist and route by digest",
+    "ci/race/security pass",
+    "Gremlins produces non-empty door orchestration evidence with zero lived/not-covered/timeout critical blockers"
+  ]
+}

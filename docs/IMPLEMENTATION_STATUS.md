@@ -4,47 +4,46 @@
 
 ## Verified foundation
 
-T-001/T-002/T-003/T-011/T-012/T-018/T-019/T-020/T-021 are verified.
+T-001/T-002/T-003/T-011/T-012/T-018/T-019/T-020/T-021/T-022 are verified.
 
-Latest durable-upgrade evidence on `8b13e5565590ac1d86f1e4ea7d9c8213542022fb`:
+Latest physical-safety durable-upgrade evidence on `dfced3277a61211ae312b8eef18e761b980a9238`:
 - module/build, vulnerability, format, vet, unit, race, engineering-loop reconciliation and benchmark smoke: PASS;
 - security/SBOM/Trivy: PASS;
-- mutation planner: `risk=CRITICAL`, `mutation_targets=["./internal/orchestration/incident"]`;
-- Gremlins over the T-021 range: `Killed=69`, `Lived=0`, `Not covered=0`, `Timed out=0`, efficacy 100%, mutator coverage 100%;
-- incident v1/v2 bundle identities, historical handler semantics, callback binding, Pebble reopen and unknown-digest fail-closed behavior are covered by executable tests.
+- mutation planner: `risk=CRITICAL`, `mutation_targets=["./internal/orchestration/action/siren"]`;
+- Gremlins over the T-022 range: `Killed=68`, `Lived=0`, `Not covered=0`, `Timed out=0`, efficacy 100%, mutator coverage 100%;
+- the first T-022 runtime commit exposed exactly one lived `Stop` return-contract mutant; the targeted test-only recovery killed it without changing production semantics;
+- Pebble tests prove duration-A enable -> close -> duration-B reopen -> exact historical identity -> historical cancellation/compensation disables the siren, while new executions use duration B.
 
-This closes F-015 and T-021.
+This closes F-016 and T-022.
 
 ## T-004 durable evolution umbrella
 
-Existing foundations:
-- SQLite `schema_migrations` exists;
-- events have `SchemaVersion`;
-- ADGO executions persist PlanID/PlanVersion/PlanDigest;
-- pinned Axiom rejects plan digest mismatch;
-- Axiom Pebble implements `ExecutionCatalog`;
-- Axiom `Host` supports multiple immutable plans over one Store and routes work by persisted digest;
-- Axiom provides conservative explicit migration APIs;
-- incident v1/v2 now retain complete execution bundles: plan + version-specific Registry/handlers + signal bindings.
+Complete ADGO plan inventory:
+- incident;
+- siren action;
+- door action;
+- camera recovery.
 
-T-021 proves the pattern for incident workflows. Remaining workflow/version surfaces are being reconciled independently rather than mechanically copying the incident implementation.
+Incident and siren now have verified multi-plan/reconstructible durable execution-bundle behavior.
 
-## F-016 / T-022 — siren configuration-derived plan drift
+Door and camera characterization found no current historical semantic drift:
+- door plan/handlers were introduced in `dc1e32de...`; later plan/handler history is formatting-only;
+- camera plan/handlers were introduced in `e8f72edf...`; no later handler semantic change is present and the plan only received formatting normalization.
 
-A Critical physical-safety gap was found while inventorying the next T-004 surface.
+However both services still open one current `adgo.Production` engine with `PlanVersion="1"` and route human/reconciliation operations through current constants. That is safe for the current unchanged v1 history, but it is not a safe release boundary for their first future semantic v2.
 
-`internal/orchestration/action/siren/plan.go` derives durable plan identity from runtime configuration: `Version = "1-" + MaxActivationDuration.String()`, and the safety timer uses that duration. The enable node owns a physical effect and has `SirenEnsureDisabled` compensation.
+## F-017 / T-023 / T-024 — fixed-version future upgrade boundary
 
-Current `siren.Open` compiles only the currently configured duration and opens one single-plan ADGO Production runtime. Pinned Axiom single-engine coordinator semantics skip persisted executions whose PlanDigest differs from the current engine. Therefore this crash/config-change sequence is unsafe:
-1. execution enables a siren and durably reaches the safety wait;
-2. process crashes;
-3. `MaxActivationDuration` changes before restart;
-4. runtime reopens under a different PlanVersion/PlanDigest;
-5. the old non-terminal execution can be skipped and its timer/disable/compensation can become unreachable through the current service.
+F-017 is preventive rather than evidence of already-corrupted durable state. The risk is that a future door/camera v2 could strand existing v1 non-terminal executions or bind them to new handlers/nodes if the release changes the current plan without retaining v1.
 
-T-022 is the next P0 slice. It will reconstruct historical siren plans strictly from canonical persisted duration versions, verify exact PlanID/PlanVersion/PlanDigest, register active + historical engines in Axiom Host, route Drive/Stop by persisted bundle identity, and fail closed on malformed or mismatched non-terminal state.
+T-023 is the next atomic P0 slice for door access control. It will:
+- freeze current v1 PlanID/PlanVersion/PlanDigest as a golden execution-bundle identity;
+- establish Host-backed bundle routing and fail-closed non-terminal startup validation;
+- route Drive, unlock approval and reconciliation by persisted bundle identity;
+- provide an internal multi-bundle test seam proving retained v1 can coexist with a distinct future active plan without shipping a fake semantic v2;
+- prove Pebble restart/human/reconciliation behavior and mutation cleanliness.
 
-Required proof includes a Pebble crash/reopen test where duration A enables the device, runtime reopens with duration B, the old execution is canceled through its historical engine, and compensation demonstrably disables the still-enabled siren while new executions use duration B.
+T-024 will apply the verified pattern independently to camera recovery, after which T-004 can be reconciled closed.
 
 ## Stage 17 residuals
 
@@ -52,4 +51,4 @@ T-013 callback HTTP READY; T-014 principal kinds TODO; T-015 authz audit/limitin
 
 ## Other P0 work
 
-T-004 durable execution semantics continues via T-022 and later remaining workflow surfaces; T-005 crash/restore linearization, T-006 topology/fencing, T-009 release qualification. T-010 verified-main guard remains planned.
+T-005 crash/restore linearization, T-006 topology/fencing and T-009 release qualification remain P0. T-010 verified-main guard remains planned.
