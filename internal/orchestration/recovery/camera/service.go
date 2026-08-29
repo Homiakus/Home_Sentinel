@@ -83,7 +83,9 @@ func openWithBundleSpecs(config Config, active bundleSpec, specs []bundleSpec) (
 		host:       host,
 		bundles:    bundles,
 		worker:     adgo.WorkerSpec{ID: workerID, Concurrency: concurrency},
-		serveHost:  host.ServeResilient,
+		serveHost: func(ctx context.Context, worker adgo.WorkerSpec) error {
+			return host.ServeResilient(ctx, worker)
+		},
 	}
 	if err := service.validatePersistedExecutions(context.Background()); err != nil {
 		return fail(err)
