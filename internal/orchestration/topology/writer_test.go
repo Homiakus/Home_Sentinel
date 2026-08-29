@@ -84,7 +84,11 @@ func TestWriterGuardExcludesAndReleasesSameProcess(t *testing.T) {
 
 func TestWriterGuardCrossProcessExclusion(t *testing.T) {
 	root := t.TempDir()
-	cmd := exec.Command(os.Executable(), "-test.run=^TestWriterGuardHelperProcess$")
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatalf("resolve test executable: %v", err)
+	}
+	cmd := exec.Command(executable, "-test.run=^TestWriterGuardHelperProcess$")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatalf("helper stdin: %v", err)
