@@ -295,6 +295,27 @@ func reopenAndReenqueue(
 	return store, engine
 }
 
+func forceWaitingTimerDue(t *testing.T, ctx context.Context, store adgo.Store, executionID, nodeID string) {
+	t.Helper()
+	persisted, err := store.Load(ctx, executionID)
+	if err != nil {
+		t.Fatalf("load waiting timer: %v", err)
+	}
+	node := persisted.Nodes[nodeID]
+	if node == nil {
+		t.Fatalf("waiting timer node %q is missing", nodeID)
+	}
+	if node.Status != adgo.NodeWaiting || node.NotBefore.IsZero() {
+		t.Fatalf("timer node %q status=%s notBefore=%s", nodeID, node.Status, node.NotBefore)
+	}
+	if _, err := store.Commit(ctx, executionID, persisted.Version, func(current *adgo.Execution) error {
+		current.Nodes[nodeID].NotBefore = time.Unix(1, 0).UTC()
+		return nil
+	}); err != nil {
+		t.Fatalf("force timer %q due: %v", nodeID, err)
+	}
+}
+
 func requireSingleActiveTask(t *testing.T, execution *adgo.Execution) (string, adgo.TaskRuntime) {
 	t.Helper()
 	if len(execution.ActiveTasks) != 1 {
@@ -365,7 +386,7 @@ func TestSirenCompletionCommitCrashDoesNotDuplicateEnableAndStillDisables(t *tes
 	crashStore := &completionCrashStore{Store: base}
 	inner := gatewayfake.NewSirenController(map[string]bool{"yard": false})
 	observed := &observedSirenController{inner: inner, arm: crashStore.armOnce}
-	plan, err := siren.CompilePlan(time.Nanosecond)
+	plan, err := siren.CompilePlan(time.Hour)
 	if err != nil {
 		t.Fatalf("compile siren: %v", err)
 	}
@@ -395,23 +416,46 @@ func TestSirenCompletionCommitCrashDoesNotDuplicateEnableAndStillDisables(t *tes
 		executionID, crashedTaskID, originalKey, siren.NodeEnable,
 	)
 	defer reopened.Close()
-	finished, err := recoveredEngine.RunLocal(ctx, executionID, adgo.LocalRunOptions{Worker: faultWorker("siren-recovery")})
+	waiting, err := recoveredEngine.RunLocal(ctx, executionID, adgo.LocalRunOptions{Worker: faultWorker("siren-recovery")})
 	if err != nil {
 		t.Fatalf("siren recovery RunLocal: %v", err)
 	}
-	if finished.Status != adgo.StatusCompleted {
-		t.Fatalf("siren recovery status=%s want=%s", finished.Status, adgo.StatusCompleted)
+	if waiting.Status != adgo.StatusWaiting {
+		t.Fatalf("siren recovery status=%s want=%s before safety deadline", waiting.Status, adgo.StatusWaiting)
 	}
 	enabled, err = inner.Enabled(ctx, "yard")
 	if err != nil {
-		t.Fatalf("read recovered siren: %v", err)
+		t.Fatalf("read recovered siren before safety deadline: %v", err)
 	}
 	enableKeys, disableKeys = observed.observedKeys()
-	if enabled {
-		t.Fatal("siren remained enabled after safety timer")
+	if !enabled {
+		t.Fatal("siren disabled before controlled safety deadline")
 	}
 	if len(enableKeys) != 1 || enableKeys[0] != originalKey {
 		t.Fatalf("siren enable was physically reinvoked: keys=%v", enableKeys)
+	}
+	if len(disableKeys) != 0 || inner.Applied != 1 || inner.Calls != 1 {
+		t.Fatalf("unexpected pre-deadline siren disable keys=%v applied=%d calls=%d", disableKeys, inner.Applied, inner.Calls)
+	}
+
+	forceWaitingTimerDue(t, ctx, reopened, executionID, siren.NodeSafety)
+	finished, err := recoveredEngine.RunLocal(ctx, executionID, adgo.LocalRunOptions{Worker: faultWorker("siren-safety")})
+	if err != nil {
+		t.Fatalf("siren safety RunLocal: %v", err)
+	}
+	if finished.Status != adgo.StatusCompleted {
+		t.Fatalf("siren safety status=%s want=%s", finished.Status, adgo.StatusCompleted)
+	}
+	enabled, err = inner.Enabled(ctx, "yard")
+	if err != nil {
+		t.Fatalf("read recovered siren after safety deadline: %v", err)
+	}
+	enableKeys, disableKeys = observed.observedKeys()
+	if enabled {
+		t.Fatal("siren remained enabled after controlled safety deadline")
+	}
+	if len(enableKeys) != 1 || enableKeys[0] != originalKey {
+		t.Fatalf("siren enable changed after safety deadline: keys=%v", enableKeys)
 	}
 	if len(disableKeys) != 1 {
 		t.Fatalf("siren safety disable calls=%d want=1 keys=%v", len(disableKeys), disableKeys)
