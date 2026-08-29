@@ -72,6 +72,31 @@ func TestCameraPebbleReopenPreservesOperatorBundle(t *testing.T) {
 	}
 }
 
+func TestCameraStartRejectsMismatchedExistingNonTerminalBundle(t *testing.T) {
+	ctx := context.Background()
+	controller := gatewayfake.NewCameraRecoveryController(
+		map[string]bool{"front": false},
+		map[string]bool{"front": false},
+	)
+	service := openMemory(t, controller)
+	request := domainrecovery.CameraRequest{RequestID: "existing-mismatch", CameraID: "front"}
+	execution, err := service.Start(ctx, request)
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	_, err = service.production.Store.Commit(ctx, execution.ID, execution.Version, func(current *adgo.Execution) error {
+		current.PlanVersion = "1-mutated"
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("inject version mismatch: %v", err)
+	}
+	_, err = service.Start(ctx, request)
+	if !errors.Is(err, ErrExecutionBundleMismatch) {
+		t.Fatalf("duplicate Start error=%v want ErrExecutionBundleMismatch", err)
+	}
+}
+
 func TestCameraOpenRejectsUnknownNonTerminalBundle(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
@@ -98,6 +123,8 @@ func TestCameraOpenRejectsUnknownNonTerminalBundle(t *testing.T) {
 	if _, err := first.Get(ctx, execution.ID); !errors.Is(err, ErrUnknownExecutionBundle) {
 		t.Fatalf("Get error=%v want ErrUnknownExecutionBundle", err)
 	}
+	serveRuntimeEntered := errors.New("camera test: Serve entered host runtime after failed preflight")
+	first.serveHost = func(context.Context, adgo.WorkerSpec) error { return serveRuntimeEntered }
 	if err := first.Serve(ctx); !errors.Is(err, ErrUnknownExecutionBundle) {
 		t.Fatalf("Serve preflight error=%v want ErrUnknownExecutionBundle", err)
 	}

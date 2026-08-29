@@ -28,6 +28,7 @@ type Service struct {
 	host       *adgo.Host
 	bundles    *bundleCatalog
 	worker     adgo.WorkerSpec
+	serveHost  func(context.Context, adgo.WorkerSpec) error
 	startMu    sync.Mutex
 }
 
@@ -82,6 +83,7 @@ func openWithBundleSpecs(config Config, active bundleSpec, specs []bundleSpec) (
 		host:       host,
 		bundles:    bundles,
 		worker:     adgo.WorkerSpec{ID: workerID, Concurrency: concurrency},
+		serveHost:  host.ServeResilient,
 	}
 	if err := service.validatePersistedExecutions(context.Background()); err != nil {
 		return fail(err)
@@ -169,7 +171,6 @@ func (s *Service) ResolveOperator(
 	var mapped adgo.HumanDecision
 	switch decision {
 	case domainrecovery.OperatorRetry:
-		// A NodeHuman approval follows the explicit second-attempt branch.
 		mapped = adgo.HumanApprove
 	case domainrecovery.OperatorReject:
 		mapped = adgo.HumanReject
@@ -206,7 +207,7 @@ func (s *Service) Serve(ctx context.Context) error {
 	if err := s.servePreflight(ctx); err != nil {
 		return err
 	}
-	return s.host.ServeResilient(ctx, s.worker)
+	return s.serveHost(ctx, s.worker)
 }
 
 func (s *Service) servePreflight(ctx context.Context) error {
