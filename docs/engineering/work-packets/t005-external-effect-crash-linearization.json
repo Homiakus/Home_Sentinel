@@ -52,7 +52,7 @@
     "After Pebble close/reopen, lease expiry is forced by controlled durable state mutation rather than elapsed-time waiting, and a new Engine/coordinator recovers the task.",
     "Recovered/redelivered work presents the identical persisted idempotency key to the gateway.",
     "Door reaches the intended final lock state while fake physical Applied remains exactly 1 across crash/recovery.",
-    "Siren reaches the intended final state while fake physical Applied remains exactly 1 across crash/recovery; cancellation/compensation behavior is not weakened.",
+    "The crash-recovered siren enable is physically applied exactly once; a later safety-disable is a distinct expected physical effect that must also occur at most once, leaving the siren disabled without weakening cancellation/compensation safety.",
     "Camera reconnect recovery reaches a verified stream state with exactly one physical reconnect application across crash/recovery.",
     "Ambiguous provider outcomes remain explicit reconciliation/human-safe paths and do not auto-reinvoke an effect whose application cannot be proven.",
     "Fault tests contain no time.Sleep or inflated timeout used as correctness synchronization.",

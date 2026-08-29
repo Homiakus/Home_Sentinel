@@ -230,7 +230,7 @@ Use the public pinned ADGO `Store`/`PebbleStore`/`NewEngine` contracts and Home 
 - test proves the provider was applied once before the lost commit and the durable task still carries the same non-empty idempotency key;
 - after Pebble close/reopen and deterministic lease expiry, a new engine/coordinator redelivers with the identical idempotency key;
 - door recovery reaches the correct final lock state with physical `Applied==1`; no second physical application occurs;
-- siren recovery reaches the correct enabled/disabled state with physical `Applied==1`; cancellation/compensation safety remains intact;
+- the crash-recovered siren enable is physically applied exactly once; a later safety-disable is a distinct expected physical effect that must also occur at most once, leaving the siren disabled without weakening cancellation/compensation safety;
 - camera reconnect recovery reaches a verified stream state with one physical reconnect application;
 - ambiguous outcome paths do not automatically replay an effect whose application is unknown; they remain explicit reconciliation/human-safe according to each workflow contract;
 - no `time.Sleep`, inflated timeout or scheduler-probability assertion is used as crash evidence;
