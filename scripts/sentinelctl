@@ -1,0 +1,506 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+BIN_DIR="${SENTINELCTL_BIN_DIR:-$ROOT/bin}"
+BINARY="${SENTINELCTL_BINARY:-$BIN_DIR/sentinel}"
+VAR_DIR="${SENTINELCTL_VAR_DIR:-$ROOT/var}"
+CONFIG_FILE="${SENTINELCTL_CONFIG:-$VAR_DIR/config.json}"
+DATA_DIR="$VAR_DIR/data"
+LOG_DIR="$VAR_DIR/log"
+RUN_DIR="$VAR_DIR/run"
+LOG_FILE="$LOG_DIR/sentinel.log"
+PID_FILE="$RUN_DIR/sentinel.pid"
+ENV_FILE="${SENTINELCTL_ENV_FILE:-$ROOT/.env}"
+COMPOSE_FILE="$ROOT/deploy/compose/compose.prod.yml"
+LOCAL_IMAGE="${SENTINELCTL_IMAGE:-home-sentinel:local}"
+SERVICE_NAME="home-sentinel"
+
+if [[ -t 1 ]]; then
+  BOLD='\033[1m'; GREEN='\033[32m'; YELLOW='\033[33m'; RED='\033[31m'; RESET='\033[0m'
+else
+  BOLD=''; GREEN=''; YELLOW=''; RED=''; RESET=''
+fi
+
+info() { printf '%b%s%b\n' "$GREEN" "$*" "$RESET"; }
+warn() { printf '%b%s%b\n' "$YELLOW" "$*" "$RESET" >&2; }
+die()  { printf '%bERROR: %s%b\n' "$RED" "$*" "$RESET" >&2; exit 1; }
+
+usage() {
+  cat <<'USAGE'
+Home Sentinel manager
+
+Usage:
+  ./scripts/sentinelctl <command> [options]
+
+Main commands:
+  menu                 Interactive management menu
+  setup                Create safe local runtime directories/configuration
+  configure            Open runtime config in $EDITOR
+  doctor               Check toolchain, files, ports and runtime state
+  build                 Build ./cmd/sentinel into ./bin/sentinel
+  image                 Build local Docker image home-sentinel:local
+  check                 Run the repository verification gate (make check)
+  run                   Run Sentinel in the foreground
+  start                 Start Sentinel in the background
+  stop                  Stop the background Sentinel process
+  restart               Restart Sentinel
+  status                Show process, version, port and paths
+  logs [N]              Follow logs (last N lines; default 100)
+  update                Fast-forward git update, rebuild, restart if needed
+
+Systemd commands (Linux):
+  service-install       Install/update a systemd unit for this checkout
+  service-enable        Enable and start the systemd unit
+  service-disable       Disable and stop the systemd unit
+  service-status        Show systemd status
+  service-remove        Remove the systemd unit
+
+Docker helper:
+  image                 Builds the Sentinel image only. The production Compose
+                        stack is intentionally not auto-started by this manager
+                        while its current container bind contract conflicts with
+                        Sentinel's loopback-only plaintext security policy.
+
+Environment overrides:
+  SENTINELCTL_CONFIG, SENTINELCTL_VAR_DIR, SENTINELCTL_BIN_DIR,
+  SENTINELCTL_BINARY, SENTINELCTL_IMAGE, SENTINELCTL_ENV_FILE
+
+Examples:
+  ./scripts/sentinelctl setup
+  ./scripts/sentinelctl doctor
+  ./scripts/sentinelctl build
+  ./scripts/sentinelctl start
+  ./scripts/sentinelctl logs
+USAGE
+}
+
+have() { command -v "$1" >/dev/null 2>&1; }
+require() { have "$1" || die "Required command not found: $1"; }
+
+ensure_dirs() {
+  mkdir -p "$BIN_DIR" "$DATA_DIR" "$LOG_DIR" "$RUN_DIR" "$VAR_DIR/frigate-secrets"
+  chmod 700 "$VAR_DIR" "$DATA_DIR" "$LOG_DIR" "$RUN_DIR" "$VAR_DIR/frigate-secrets" 2>/dev/null || true
+}
+
+read_go_version() {
+  if [[ -f "$ROOT/.go-version" ]]; then
+    tr -d '[:space:]' < "$ROOT/.go-version"
+  fi
+}
+
+version_ge() {
+  local have_v="${1#go}" need_v="${2#go}"
+  [[ "$(printf '%s\n%s\n' "$need_v" "$have_v" | sort -V | head -n1)" == "$need_v" ]]
+}
+
+process_running() {
+  [[ -f "$PID_FILE" ]] || return 1
+  local pid
+  pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  if [[ -e "/proc/$pid/exe" ]] && have readlink; then
+    local running_exe expected_exe
+    running_exe="$(readlink -f "/proc/$pid/exe" 2>/dev/null || true)"
+    expected_exe="$(readlink -f "$BINARY" 2>/dev/null || true)"
+    [[ -z "$running_exe" || -z "$expected_exe" || "$running_exe" == "$expected_exe" ]] || return 1
+  fi
+  return 0
+}
+
+cleanup_stale_pid() {
+  if [[ -f "$PID_FILE" ]] && ! process_running; then
+    rm -f "$PID_FILE"
+  fi
+}
+
+runtime_env() {
+  export SENTINEL_CONFIG="$CONFIG_FILE"
+  export SENTINEL_DB_PATH="$DATA_DIR/sentinel.db"
+  # Keep plaintext HTTP loopback-only until TLS/proxy trust is explicit in the app model.
+  export SENTINEL_LISTEN="${SENTINEL_LISTEN:-127.0.0.1:8080}"
+  export SENTINEL_FRIGATE_CREDENTIALS_DIR="${SENTINEL_FRIGATE_CREDENTIALS_DIR:-$VAR_DIR/frigate-secrets}"
+}
+
+write_default_config() {
+  [[ ! -e "$CONFIG_FILE" ]] || return 0
+  cat > "$CONFIG_FILE" <<'JSON'
+{
+  "server": {
+    "listen": "127.0.0.1:8080",
+    "read_timeout": "15s",
+    "write_timeout": "30s",
+    "shutdown_grace": "10s"
+  },
+  "database": {
+    "busy_timeout": "5s"
+  },
+  "features": {
+    "experimental": false
+  }
+}
+JSON
+  chmod 600 "$CONFIG_FILE" 2>/dev/null || true
+  info "Created $CONFIG_FILE"
+}
+
+setup_env_example() {
+  [[ ! -e "$ENV_FILE" ]] || return 0
+  if [[ -f "$ROOT/.env.example" ]]; then
+    cp "$ROOT/.env.example" "$ENV_FILE"
+    chmod 600 "$ENV_FILE" 2>/dev/null || true
+    warn "Created $ENV_FILE from .env.example for future Compose use; image placeholders still require review."
+  fi
+}
+
+cmd_setup() {
+  ensure_dirs
+  write_default_config
+  setup_env_example
+  info "Local runtime initialized."
+  printf '  config: %s\n  data:   %s\n  logs:   %s\n' "$CONFIG_FILE" "$DATA_DIR" "$LOG_FILE"
+  info "Next: ./scripts/sentinelctl doctor && ./scripts/sentinelctl build"
+}
+
+cmd_configure() {
+  cmd_setup >/dev/null
+  local editor="${EDITOR:-}"
+  if [[ -z "$editor" ]]; then
+    if have nano; then editor=nano
+    elif have vi; then editor=vi
+    else
+      printf '%s\n' "$CONFIG_FILE"
+      die 'Set $EDITOR (for example: export EDITOR=nano) to edit automatically.'
+    fi
+  fi
+  "$editor" "$CONFIG_FILE"
+}
+
+cmd_build() {
+  require go
+  ensure_dirs
+  local expected actual module commit build_time version ldflags
+  expected="$(read_go_version)"
+  actual="$(go version | awk '{print $3}')"
+  if [[ -n "$expected" ]] && ! version_ge "$actual" "go$expected"; then
+    die "Go $expected or newer is required by .go-version; found $actual"
+  fi
+  module="$(cd "$ROOT" && go list -m -f '{{.Path}}')"
+  commit="$(cd "$ROOT" && git rev-parse --short=12 HEAD 2>/dev/null || printf unknown)"
+  build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  version="${SENTINEL_VERSION:-dev}"
+  ldflags="-s -w -X ${module}/internal/buildinfo.Version=${version} -X ${module}/internal/buildinfo.Commit=${commit} -X ${module}/internal/buildinfo.BuildTime=${build_time}"
+  info "Building Home Sentinel ($version, $commit)..."
+  (cd "$ROOT" && CGO_ENABLED=0 go build -trimpath -ldflags="$ldflags" -o "$BINARY" ./cmd/sentinel)
+  chmod 755 "$BINARY"
+  "$BINARY" version
+}
+
+cmd_image() {
+  require docker
+  docker info >/dev/null 2>&1 || die 'Docker daemon is not available.'
+  info "Building Docker image $LOCAL_IMAGE..."
+  docker build -f "$ROOT/deploy/compose/Dockerfile" -t "$LOCAL_IMAGE" "$ROOT"
+}
+
+cmd_check() {
+  require make
+  info 'Running repository verification gate...'
+  (cd "$ROOT" && make check)
+}
+
+cmd_run() {
+  cmd_setup >/dev/null
+  [[ -x "$BINARY" ]] || cmd_build
+  runtime_env
+  cd "$ROOT"
+  exec "$BINARY" serve
+}
+
+cmd_start() {
+  cmd_setup >/dev/null
+  cleanup_stale_pid
+  if process_running; then
+    info "Home Sentinel is already running (PID $(cat "$PID_FILE"))."
+    return 0
+  fi
+  [[ -x "$BINARY" ]] || cmd_build
+  runtime_env
+  info 'Starting Home Sentinel...'
+  (
+    cd "$ROOT"
+    nohup "$BINARY" serve >>"$LOG_FILE" 2>&1 &
+    echo $! > "$PID_FILE"
+  )
+  sleep 1
+  if process_running; then
+    info "Started (PID $(cat "$PID_FILE")). Logs: $LOG_FILE"
+  else
+    rm -f "$PID_FILE"
+    warn "Home Sentinel exited during startup. Last log lines:"
+    tail -n 40 "$LOG_FILE" 2>/dev/null || true
+    return 1
+  fi
+}
+
+cmd_stop() {
+  cleanup_stale_pid
+  if ! process_running; then
+    info 'Home Sentinel is not running.'
+    return 0
+  fi
+  local pid deadline
+  pid="$(cat "$PID_FILE")"
+  info "Stopping Home Sentinel (PID $pid)..."
+  kill -TERM "$pid"
+  deadline=$((SECONDS + 15))
+  while kill -0 "$pid" 2>/dev/null; do
+    if (( SECONDS >= deadline )); then
+      warn 'Graceful stop timed out; sending SIGKILL.'
+      kill -KILL "$pid" 2>/dev/null || true
+      break
+    fi
+    sleep 0.25
+  done
+  rm -f "$PID_FILE"
+  info 'Stopped.'
+}
+
+cmd_restart() { cmd_stop; cmd_start; }
+
+port_status() {
+  if have ss; then
+    ss -ltn 2>/dev/null | grep -E '(^|[.:])8080[[:space:]]' || true
+  elif have lsof; then
+    lsof -nP -iTCP:8080 -sTCP:LISTEN 2>/dev/null || true
+  fi
+}
+
+cmd_status() {
+  cleanup_stale_pid
+  printf '%bHome Sentinel%b\n' "$BOLD" "$RESET"
+  if process_running; then
+    printf '  state:   running\n  pid:     %s\n' "$(cat "$PID_FILE")"
+  else
+    printf '  state:   stopped\n'
+  fi
+  if [[ -x "$BINARY" ]]; then
+    printf '  binary:  %s\n  version: ' "$BINARY"
+    "$BINARY" version || true
+  else
+    printf '  binary:  not built\n'
+  fi
+  printf '  config:  %s\n  data:    %s\n  log:     %s\n' "$CONFIG_FILE" "$DATA_DIR" "$LOG_FILE"
+  local ports
+  ports="$(port_status)"
+  if [[ -n "$ports" ]]; then printf '  port 8080:\n%s\n' "$ports"; fi
+}
+
+cmd_logs() {
+  local lines="${1:-100}"
+  [[ "$lines" =~ ^[0-9]+$ ]] || die 'logs expects an optional numeric line count.'
+  ensure_dirs
+  touch "$LOG_FILE"
+  tail -n "$lines" -f "$LOG_FILE"
+}
+
+cmd_doctor() {
+  local failures=0 warnings=0 expected actual
+  printf '%bHome Sentinel doctor%b\n' "$BOLD" "$RESET"
+
+  if have go; then
+    expected="$(read_go_version)"; actual="$(go version | awk '{print $3}')"
+    if [[ -n "$expected" ]] && ! version_ge "$actual" "go$expected"; then
+      printf '  [FAIL] Go: %s (need >= %s)\n' "$actual" "$expected"; failures=$((failures+1))
+    else
+      printf '  [ OK ] Go: %s\n' "$actual"
+    fi
+  else
+    printf '  [FAIL] Go is not installed\n'; failures=$((failures+1))
+  fi
+
+  for tool in git make; do
+    if have "$tool"; then printf '  [ OK ] %s\n' "$tool"; else printf '  [WARN] %s not found\n' "$tool"; warnings=$((warnings+1)); fi
+  done
+
+  if [[ -f "$CONFIG_FILE" ]]; then
+    printf '  [ OK ] config: %s\n' "$CONFIG_FILE"
+    if have python3 && ! python3 -m json.tool "$CONFIG_FILE" >/dev/null 2>&1; then
+      printf '  [FAIL] config is not valid JSON\n'; failures=$((failures+1))
+    fi
+  else
+    printf '  [WARN] config missing; run setup\n'; warnings=$((warnings+1))
+  fi
+
+  if [[ -x "$BINARY" ]]; then printf '  [ OK ] binary built\n'; else printf '  [WARN] binary not built\n'; warnings=$((warnings+1)); fi
+
+  cleanup_stale_pid
+  if process_running; then printf '  [ OK ] process running (PID %s)\n' "$(cat "$PID_FILE")"; else printf '  [INFO] process stopped\n'; fi
+
+  local ports
+  ports="$(port_status)"
+  if [[ -n "$ports" ]] && ! process_running; then
+    printf '  [WARN] TCP/8080 is already occupied by another process\n'; warnings=$((warnings+1))
+  else
+    printf '  [ OK ] TCP/8080 availability/state is consistent\n'
+  fi
+
+  if have docker; then
+    if docker info >/dev/null 2>&1; then printf '  [ OK ] Docker daemon available\n'; else printf '  [WARN] Docker installed but daemon unavailable\n'; warnings=$((warnings+1)); fi
+  else
+    printf '  [INFO] Docker not installed (only needed for image work)\n'
+  fi
+
+  if [[ -f "$ENV_FILE" ]] && grep -q 'registry\.example\.invalid\|REPLACE_ME' "$ENV_FILE"; then
+    printf '  [WARN] .env still contains production image placeholders\n'; warnings=$((warnings+1))
+  fi
+
+  if grep -q 'SENTINEL_LISTEN: 0.0.0.0:8080' "$COMPOSE_FILE" 2>/dev/null; then
+    printf '  [WARN] production Compose requests 0.0.0.0:8080, while current runtime rejects non-loopback plaintext binds; manager will not auto-start that stack\n'
+    warnings=$((warnings+1))
+  fi
+
+  printf '\nResult: %d failure(s), %d warning(s).\n' "$failures" "$warnings"
+  (( failures == 0 ))
+}
+
+cmd_update() {
+  require git
+  local was_running=0 service_running=0
+  process_running && was_running=1 || true
+  if have systemctl && systemctl is-active --quiet "$SERVICE_NAME.service" 2>/dev/null; then service_running=1; fi
+  if [[ -n "$(cd "$ROOT" && git status --porcelain)" ]]; then
+    die 'Working tree has local changes; refusing automatic update.'
+  fi
+  info 'Updating repository with fast-forward only...'
+  (cd "$ROOT" && git pull --ff-only)
+  cmd_build
+  if (( service_running )); then
+    sudo_cmd systemctl restart "$SERVICE_NAME.service"
+  elif (( was_running )); then
+    cmd_restart
+  fi
+}
+
+sudo_cmd() {
+  if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then "$@"; elif have sudo; then sudo "$@"; else die 'Root privileges are required (sudo not found).'; fi
+}
+
+systemd_unit_path() { printf '/etc/systemd/system/%s.service' "$SERVICE_NAME"; }
+
+cmd_service_install() {
+  [[ "$(uname -s)" == Linux ]] || die 'systemd integration is available only on Linux.'
+  require systemctl
+  cmd_setup >/dev/null
+  [[ -x "$BINARY" ]] || cmd_build
+  local run_user unit tmp
+  run_user="${SUDO_USER:-${USER:-$(id -un)}}"
+  unit="$(systemd_unit_path)"
+  tmp="$(mktemp)"
+  cat > "$tmp" <<EOF
+[Unit]
+Description=Home Sentinel local security/automation service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$run_user
+WorkingDirectory=$ROOT
+Environment=SENTINEL_CONFIG=$CONFIG_FILE
+Environment=SENTINEL_DB_PATH=$DATA_DIR/sentinel.db
+Environment=SENTINEL_LISTEN=127.0.0.1:8080
+Environment=SENTINEL_FRIGATE_CREDENTIALS_DIR=$VAR_DIR/frigate-secrets
+ExecStart=$BINARY serve
+Restart=on-failure
+RestartSec=3s
+TimeoutStopSec=20s
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  sudo_cmd install -m 0644 "$tmp" "$unit"
+  rm -f "$tmp"
+  sudo_cmd systemctl daemon-reload
+  info "Installed $unit"
+  info 'Enable it with: ./scripts/sentinelctl service-enable'
+}
+
+cmd_service_enable() { require systemctl; sudo_cmd systemctl enable --now "$SERVICE_NAME.service"; }
+cmd_service_disable() { require systemctl; sudo_cmd systemctl disable --now "$SERVICE_NAME.service"; }
+cmd_service_status() { require systemctl; systemctl status "$SERVICE_NAME.service" --no-pager || true; }
+cmd_service_remove() {
+  require systemctl
+  sudo_cmd systemctl disable --now "$SERVICE_NAME.service" 2>/dev/null || true
+  sudo_cmd rm -f "$(systemd_unit_path)"
+  sudo_cmd systemctl daemon-reload
+  info 'systemd unit removed.'
+}
+
+menu() {
+  while true; do
+    cat <<'MENU'
+
+Home Sentinel
+  1) Setup
+  2) Doctor
+  3) Build
+  4) Start
+  5) Stop
+  6) Restart
+  7) Status
+  8) Logs
+  9) Configure
+ 10) Check/tests
+ 11) Update
+  0) Exit
+MENU
+    printf '> '
+    read -r choice
+    case "$choice" in
+      1) cmd_setup;; 2) cmd_doctor || true;; 3) cmd_build;; 4) cmd_start;; 5) cmd_stop;;
+      6) cmd_restart;; 7) cmd_status;; 8) cmd_logs 100;; 9) cmd_configure;; 10) cmd_check;; 11) cmd_update;;
+      0) return 0;; *) warn 'Unknown menu item.';;
+    esac
+  done
+}
+
+main() {
+  local command="${1:-}"
+  if [[ -z "$command" ]]; then
+    if [[ -t 0 && -t 1 ]]; then menu; else usage; fi
+    return 0
+  fi
+  shift || true
+  case "$command" in
+    -h|--help|help) usage;;
+    menu) menu;;
+    setup) cmd_setup "$@";;
+    configure|config) cmd_configure "$@";;
+    doctor) cmd_doctor "$@";;
+    build) cmd_build "$@";;
+    image) cmd_image "$@";;
+    check|test) cmd_check "$@";;
+    run) cmd_run "$@";;
+    start) cmd_start "$@";;
+    stop) cmd_stop "$@";;
+    restart) cmd_restart "$@";;
+    status) cmd_status "$@";;
+    logs) cmd_logs "$@";;
+    update) cmd_update "$@";;
+    service-install) cmd_service_install "$@";;
+    service-enable) cmd_service_enable "$@";;
+    service-disable) cmd_service_disable "$@";;
+    service-status) cmd_service_status "$@";;
+    service-remove) cmd_service_remove "$@";;
+    *) die "Unknown command: $command (try --help)";;
+  esac
+}
+
+main "$@"

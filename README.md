@@ -2,6 +2,22 @@
 
 Home Sentinel — локальная security/automation платформа на Go. Архитектура разделяет высокочастотный media/data plane и проверяемый control plane.
 
+## Быстрый запуск и управление
+
+Для Linux добавлен единый управляющий скрипт сборки, первоначальной настройки и эксплуатации:
+
+```bash
+./scripts/sentinelctl setup
+./scripts/sentinelctl doctor
+./scripts/sentinelctl build
+./scripts/sentinelctl start
+./scripts/sentinelctl status
+```
+
+Запуск `./scripts/sentinelctl` без аргументов открывает интерактивное меню. Также доступны `stop`, `restart`, `logs`, `update`, Docker image build и установка systemd-службы.
+
+Подробная инструкция: [`docs/MANAGEMENT.md`](docs/MANAGEMENT.md).
+
 ## Архитектурный принцип
 
 ```text
