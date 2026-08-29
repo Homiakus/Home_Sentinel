@@ -31,6 +31,7 @@ import (
 	tgapi "github.com/Homiakus/Home_Sentinel/internal/integrations/telegram"
 	"github.com/Homiakus/Home_Sentinel/internal/intercom"
 	"github.com/Homiakus/Home_Sentinel/internal/locks"
+	"github.com/Homiakus/Home_Sentinel/internal/orchestration/topology"
 	"github.com/Homiakus/Home_Sentinel/internal/realtime"
 	"github.com/Homiakus/Home_Sentinel/internal/repository"
 	searchsvc "github.com/Homiakus/Home_Sentinel/internal/search"
@@ -75,6 +76,7 @@ type App struct {
 	Backup                 *backup.Manager
 	BackupScheduler        *backup.Scheduler
 	BackupRestic           *resticint.Client
+	writerGuard            *topology.WriterGuard
 	runCtx                 context.Context
 	runCancel              context.CancelFunc
 	started                time.Time
@@ -99,15 +101,20 @@ func Open(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error
 	if err != nil {
 		return nil, err
 	}
-	db, err := database.Open(ctx, database.Options{Path: cfg.Database.Path, BusyTimeout: cfg.Database.BusyTimeout})
+	a.writerGuard, err = topology.AcquireWriter(filepath.Dir(cfg.Database.Path))
 	if err != nil {
 		return nil, err
 	}
-	if err := database.Migrate(ctx, db); err != nil {
-		_ = db.Close()
+	db, err := database.Open(ctx, database.Options{Path: cfg.Database.Path, BusyTimeout: cfg.Database.BusyTimeout})
+	if err != nil {
+		_ = a.Close()
 		return nil, err
 	}
 	a.DB = db
+	if err := database.Migrate(ctx, db); err != nil {
+		_ = a.Close()
+		return nil, err
+	}
 	a.Health.Set("database", health.Healthy, "", "")
 	a.Health.Set("sentinel", health.Healthy, "", "")
 	a.runCtx, a.runCancel = context.WithCancel(context.Background())
@@ -120,7 +127,7 @@ func Open(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error
 	a.HardwareRecommendation = hardware.Recommend(a.Hardware)
 	guard, err := netpolicy.New(cfg.Network.CameraCIDRs)
 	if err != nil {
-		_ = db.Close()
+		_ = a.Close()
 		return nil, err
 	}
 	secretRoot := filepath.Join(filepath.Dir(cfg.Database.Path), "secrets")
@@ -146,14 +153,14 @@ func Open(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error
 		if cfg.Frigate.TokenRef != "" {
 			b, resolveErr := a.Secrets.Resolve(cfg.Frigate.TokenRef)
 			if resolveErr != nil {
-				_ = db.Close()
+				_ = a.Close()
 				return nil, fmt.Errorf("resolve Frigate token: %w", resolveErr)
 			}
 			token = string(b)
 		}
 		client, clientErr := frigateint.NewClient(frigateint.ClientOptions{BaseURL: cfg.Frigate.URL, BearerToken: token})
 		if clientErr != nil {
-			_ = db.Close()
+			_ = a.Close()
 			return nil, clientErr
 		}
 		a.Health.Set("frigate", health.Starting, "NOT_VERIFIED", "Frigate configured; readiness not yet verified")
@@ -391,6 +398,12 @@ func (a *App) Close() error {
 			first = err
 		}
 		a.DB = nil
+	}
+	if a.writerGuard != nil {
+		if err := a.writerGuard.Close(); err != nil && first == nil {
+			first = err
+		}
+		a.writerGuard = nil
 	}
 	return first
 }
