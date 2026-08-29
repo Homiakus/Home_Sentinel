@@ -148,10 +148,10 @@ func TestNormalizeServeErrorPreservesParentCancellationSemantics(t *testing.T) {
 	cancel()
 
 	cases := []struct {
-		name            string
-		ctx             context.Context
-		err             error
-		want            error
+		name           string
+		ctx            context.Context
+		err            error
+		want           error
 		forbidCanceled bool
 	}{
 		{name: "active parent cancellation result remains cancellation", ctx: context.Background(), err: context.Canceled, want: context.Canceled},
