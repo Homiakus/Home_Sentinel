@@ -96,7 +96,9 @@ func newRegistryV1(deps Dependencies) *adgo.Registry {
 }
 
 // assessRiskV1 preserves the exact pre-risk-policy scoring semantics used by
-// durable v1 executions. Do not replace this with the active policy.
+// durable v1 executions. The branch-free clamps are equivalent to the original
+// positive-evidence and score-cap guards while avoiding unobservable boundary
+// mutants at contribution=0 and score=1.
 func assessRiskV1(_ context.Context, req adgo.ActivityRequest) (adgo.ActivityResult, error) {
 	trigger, err := readData[domainincident.Trigger](req.Data, "trigger")
 	if err != nil {
@@ -111,22 +113,10 @@ func assessRiskV1(_ context.Context, req adgo.ActivityRequest) (adgo.ActivityRes
 	if strings.Contains(strings.ToLower(trigger.Kind), "person") {
 		score += 0.30
 	}
-	if evidenceCount > 0 {
-		score += math.Min(0.15, float64(evidenceCount)*0.05)
-	}
-	if score > 1 {
-		score = 1
-	}
+	evidenceContribution := math.Min(0.15, math.Max(0, float64(evidenceCount)*0.05))
+	score = math.Min(1, score+evidenceContribution)
 
-	risk := domainincident.RiskLow
-	switch {
-	case score >= 0.90:
-		risk = domainincident.RiskCritical
-	case score >= 0.75:
-		risk = domainincident.RiskHigh
-	case score >= 0.50:
-		risk = domainincident.RiskMedium
-	}
+	risk := classifyRiskV1(score)
 	summary := fmt.Sprintf(
 		"%s from %s; confidence=%.3f evidence=%d risk=%s",
 		trigger.Kind, trigger.SourceID, trigger.Confidence, evidenceCount, risk,
@@ -140,6 +130,19 @@ func assessRiskV1(_ context.Context, req adgo.ActivityRequest) (adgo.ActivityRes
 		Quality: adgo.QualityVector{"risk_input_quality": trigger.Confidence},
 		Outcome: adgo.OutcomeCompleted,
 	}, nil
+}
+
+func classifyRiskV1(score float64) domainincident.Risk {
+	switch {
+	case score >= 0.90:
+		return domainincident.RiskCritical
+	case score >= 0.75:
+		return domainincident.RiskHigh
+	case score >= 0.50:
+		return domainincident.RiskMedium
+	default:
+		return domainincident.RiskLow
+	}
 }
 
 func archiveIncidentV1(_ context.Context, _ adgo.ActivityRequest) (adgo.ActivityResult, error) {
