@@ -236,15 +236,24 @@ func (s *Service) Get(ctx context.Context, executionID string) (*adgo.Execution,
 }
 
 // Serve runs a multi-plan resilient coordinator/worker plus the active-v2
-// schedule runner. The single-plan Production.Engine is intentionally not
-// served, preventing historical executions from being interpreted as v2.
+// schedule runner. Fail-closed validation is completed synchronously before any
+// long-running goroutine starts so startup failures cannot be hidden by a live
+// coordinator loop.
 func (s *Service) Serve(ctx context.Context) error {
+	if err := s.servePreflight(ctx); err != nil {
+		return err
+	}
+	return s.serveRuntime(ctx)
+}
+
+func (s *Service) servePreflight(ctx context.Context) error {
 	if s == nil || s.host == nil || s.production == nil || s.production.ScheduleRunner == nil {
 		return errors.New("incident: service is not open")
 	}
-	if err := s.validatePersistedExecutions(ctx); err != nil {
-		return err
-	}
+	return s.validatePersistedExecutions(ctx)
+}
+
+func (s *Service) serveRuntime(ctx context.Context) error {
 	serveCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	errCh := make(chan error, 2)
@@ -252,6 +261,10 @@ func (s *Service) Serve(ctx context.Context) error {
 	go func() { errCh <- s.production.ScheduleRunner.Run(serveCtx) }()
 	err := <-errCh
 	cancel()
+	return normalizeServeError(ctx, err)
+}
+
+func normalizeServeError(ctx context.Context, err error) error {
 	if errors.Is(err, context.Canceled) && ctx.Err() != nil {
 		return ctx.Err()
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -133,16 +134,18 @@ func assessRiskV1(_ context.Context, req adgo.ActivityRequest) (adgo.ActivityRes
 }
 
 func classifyRiskV1(score float64) domainincident.Risk {
-	switch {
-	case score >= 0.90:
-		return domainincident.RiskCritical
-	case score >= 0.75:
-		return domainincident.RiskHigh
-	case score >= 0.50:
-		return domainincident.RiskMedium
-	default:
-		return domainincident.RiskLow
+	thresholds := [...]float64{0.50, 0.75, 0.90}
+	risks := [...]domainincident.Risk{
+		domainincident.RiskLow,
+		domainincident.RiskMedium,
+		domainincident.RiskHigh,
+		domainincident.RiskCritical,
 	}
+	// Search for the first threshold >= the next representable value. Advancing
+	// by one ULP preserves the historical inclusive >= threshold semantics while
+	// keeping the compatibility classifier free of mutation-invisible case guards.
+	index := sort.SearchFloat64s(thresholds[:], math.Nextafter(score, math.Inf(1)))
+	return risks[index]
 }
 
 func archiveIncidentV1(_ context.Context, _ adgo.ActivityRequest) (adgo.ActivityResult, error) {

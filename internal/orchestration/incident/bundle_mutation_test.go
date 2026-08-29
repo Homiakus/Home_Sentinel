@@ -92,12 +92,12 @@ func decodeFact(value any, out any) error {
 	return json.Unmarshal(raw, out)
 }
 
-func TestServeRequiresCompleteRuntimeComponents(t *testing.T) {
+func TestServePreflightRequiresCompleteRuntimeComponents(t *testing.T) {
 	valid := memoryService(t, gatewayfake.NewNotifier())
 
 	var nilService *Service
-	if err := nilService.Serve(context.Background()); err == nil || !strings.Contains(err.Error(), "service is not open") {
-		t.Fatalf("nil service Serve error=%v", err)
+	if err := nilService.servePreflight(context.Background()); err == nil || !strings.Contains(err.Error(), "service is not open") {
+		t.Fatalf("nil service preflight error=%v", err)
 	}
 
 	cases := []struct {
@@ -116,14 +116,14 @@ func TestServeRequiresCompleteRuntimeComponents(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			copy := *valid
 			tc.mutate(&copy)
-			if err := copy.Serve(context.Background()); err == nil || !strings.Contains(err.Error(), "service is not open") {
-				t.Fatalf("Serve error=%v", err)
+			if err := copy.servePreflight(context.Background()); err == nil || !strings.Contains(err.Error(), "service is not open") {
+				t.Fatalf("servePreflight error=%v", err)
 			}
 		})
 	}
 }
 
-func TestServeRejectsUnknownNonTerminalBundleBeforeRunning(t *testing.T) {
+func TestServePreflightRejectsUnknownNonTerminalBundle(t *testing.T) {
 	ctx := context.Background()
 	service := memoryService(t, gatewayfake.NewNotifier())
 	execution, err := service.Start(ctx, legacyTrigger("evt-serve-unknown-bundle"))
@@ -137,8 +137,38 @@ func TestServeRejectsUnknownNonTerminalBundleBeforeRunning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("inject unknown digest: %v", err)
 	}
-	if err := service.Serve(ctx); !errors.Is(err, ErrUnknownExecutionBundle) {
-		t.Fatalf("Serve error=%v want ErrUnknownExecutionBundle", err)
+	if err := service.servePreflight(ctx); !errors.Is(err, ErrUnknownExecutionBundle) {
+		t.Fatalf("servePreflight error=%v want ErrUnknownExecutionBundle", err)
+	}
+}
+
+func TestNormalizeServeErrorPreservesParentCancellationSemantics(t *testing.T) {
+	sentinel := errors.New("sentinel")
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	cases := []struct {
+		name            string
+		ctx             context.Context
+		err             error
+		want            error
+		forbidCanceled bool
+	}{
+		{name: "active parent cancellation result remains cancellation", ctx: context.Background(), err: context.Canceled, want: context.Canceled},
+		{name: "canceled parent owns cancellation", ctx: canceledCtx, err: context.Canceled, want: context.Canceled},
+		{name: "canceled parent does not hide runtime error", ctx: canceledCtx, err: sentinel, want: sentinel, forbidCanceled: true},
+		{name: "active parent preserves runtime error", ctx: context.Background(), err: sentinel, want: sentinel, forbidCanceled: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := normalizeServeError(tc.ctx, tc.err)
+			if !errors.Is(got, tc.want) {
+				t.Fatalf("normalizeServeError=%v want errors.Is(%v)", got, tc.want)
+			}
+			if tc.forbidCanceled && errors.Is(got, context.Canceled) {
+				t.Fatalf("normalizeServeError=%v unexpectedly became context.Canceled", got)
+			}
+		})
 	}
 }
 
