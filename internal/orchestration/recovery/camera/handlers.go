@@ -15,19 +15,27 @@ type Dependencies struct {
 	Controller gateway.CameraRecoveryController
 }
 
+// NewRegistry is the active registry surface. Camera v1 handler semantics are
+// deliberately frozen below. A real semantic v2 must introduce a separate
+// versioned registry/handler set rather than changing these implementations in
+// place, because PlanDigest covers the graph but not Go handler behavior.
 func NewRegistry(deps Dependencies) *adgo.Registry {
+	return newRegistryV1(deps)
+}
+
+func newRegistryV1(deps Dependencies) *adgo.Registry {
 	registry := adgo.NewRegistry()
-	registry.Activity(ActivityValidate, validateRequest)
-	registry.Activity(ActivityProbeNet, probeNetwork(deps.Controller))
-	registry.Activity(ActivityProbeRTSP, probeStream(deps.Controller))
-	registry.Activity(ActivityReconnect, reconnect(deps.Controller))
-	registry.Activity(ActivityRecord, record)
-	registry.Decision(DecisionNetwork, decideBool("network_ok", adgo.OutcomePass, adgo.OutcomeHuman))
-	registry.Decision(DecisionStream, decideStream)
+	registry.Activity(ActivityValidate, validateRequestV1)
+	registry.Activity(ActivityProbeNet, probeNetworkV1(deps.Controller))
+	registry.Activity(ActivityProbeRTSP, probeStreamV1(deps.Controller))
+	registry.Activity(ActivityReconnect, reconnectV1(deps.Controller))
+	registry.Activity(ActivityRecord, recordV1)
+	registry.Decision(DecisionNetwork, decideBoolV1("network_ok", adgo.OutcomePass, adgo.OutcomeHuman))
+	registry.Decision(DecisionStream, decideStreamV1)
 	return registry
 }
 
-func validateRequest(_ context.Context, req adgo.ActivityRequest) (adgo.ActivityResult, error) {
+func validateRequestV1(_ context.Context, req adgo.ActivityRequest) (adgo.ActivityResult, error) {
 	request, err := readData[domainrecovery.CameraRequest](req.Data, "request")
 	if err != nil {
 		return adgo.ActivityResult{}, adgo.Fail(adgo.FailureInvalidInput, err)
@@ -38,7 +46,7 @@ func validateRequest(_ context.Context, req adgo.ActivityRequest) (adgo.Activity
 	return adgo.ActivityResult{Facts: map[string]any{"request_valid": true}, Outcome: adgo.OutcomeCompleted}, nil
 }
 
-func probeNetwork(controller gateway.CameraRecoveryController) adgo.ActivityHandler {
+func probeNetworkV1(controller gateway.CameraRecoveryController) adgo.ActivityHandler {
 	return func(ctx context.Context, req adgo.ActivityRequest) (adgo.ActivityResult, error) {
 		if controller == nil {
 			return adgo.ActivityResult{}, adgo.Fail(adgo.FailurePermanent, errors.New("camera recovery: controller is not configured"))
@@ -55,7 +63,7 @@ func probeNetwork(controller gateway.CameraRecoveryController) adgo.ActivityHand
 	}
 }
 
-func probeStream(controller gateway.CameraRecoveryController) adgo.ActivityHandler {
+func probeStreamV1(controller gateway.CameraRecoveryController) adgo.ActivityHandler {
 	return func(ctx context.Context, req adgo.ActivityRequest) (adgo.ActivityResult, error) {
 		if controller == nil {
 			return adgo.ActivityResult{}, adgo.Fail(adgo.FailurePermanent, errors.New("camera recovery: controller is not configured"))
@@ -83,7 +91,7 @@ func probeStream(controller gateway.CameraRecoveryController) adgo.ActivityHandl
 	}
 }
 
-func reconnect(controller gateway.CameraRecoveryController) adgo.ActivityHandler {
+func reconnectV1(controller gateway.CameraRecoveryController) adgo.ActivityHandler {
 	return func(ctx context.Context, req adgo.ActivityRequest) (adgo.ActivityResult, error) {
 		if controller == nil {
 			return adgo.ActivityResult{}, adgo.Fail(adgo.FailurePermanent, errors.New("camera recovery: controller is not configured"))
@@ -106,7 +114,7 @@ func reconnect(controller gateway.CameraRecoveryController) adgo.ActivityHandler
 	}
 }
 
-func decideBool(key string, yes, no adgo.Outcome) adgo.DecisionHandler {
+func decideBoolV1(key string, yes, no adgo.Outcome) adgo.DecisionHandler {
 	return func(_ context.Context, snapshot adgo.Snapshot) (adgo.Outcome, error) {
 		value, err := readData[bool](snapshot.Data, key)
 		if err != nil {
@@ -119,7 +127,7 @@ func decideBool(key string, yes, no adgo.Outcome) adgo.DecisionHandler {
 	}
 }
 
-func decideStream(_ context.Context, snapshot adgo.Snapshot) (adgo.Outcome, error) {
+func decideStreamV1(_ context.Context, snapshot adgo.Snapshot) (adgo.Outcome, error) {
 	for _, item := range []struct {
 		key string
 		no  adgo.Outcome
@@ -142,7 +150,7 @@ func decideStream(_ context.Context, snapshot adgo.Snapshot) (adgo.Outcome, erro
 	return adgo.OutcomeFail, errors.New("camera recovery: no stream probe result")
 }
 
-func record(_ context.Context, _ adgo.ActivityRequest) (adgo.ActivityResult, error) {
+func recordV1(_ context.Context, _ adgo.ActivityRequest) (adgo.ActivityResult, error) {
 	return adgo.ActivityResult{Outcome: adgo.OutcomeCompleted}, nil
 }
 

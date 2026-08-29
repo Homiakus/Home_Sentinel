@@ -10,6 +10,8 @@ const (
 	PlanID      = "home-sentinel-camera-recovery"
 	PlanVersion = "1"
 
+	cameraV1PlanDigest = "sha256:a0781f96957948af4ea5535c04f1a00ffffa40653c55cd0ed8ea0cfbcd20706f"
+
 	ActivityValidate  = "CameraRecoveryValidate"
 	ActivityProbeNet  = "CameraRecoveryProbeNetwork"
 	ActivityProbeRTSP = "CameraRecoveryProbeStream"
@@ -40,6 +42,14 @@ const (
 )
 
 func CompilePlan() (*adgo.Plan, error) {
+	return compilePlanVersion(PlanVersion)
+}
+
+// compilePlanVersion is an internal upgrade-boundary seam. Production remains
+// on PlanVersion until a real semantic version is introduced; tests may use a
+// distinct version to prove retained-v1 Host routing without inventing a fake
+// production v2.
+func compilePlanVersion(version string) (*adgo.Plan, error) {
 	retry := adgo.DefaultRetryPolicy()
 	probe := func(id, activity, output, next string) adgo.Node {
 		return adgo.Node{
@@ -62,7 +72,7 @@ func CompilePlan() (*adgo.Plan, error) {
 		return adgo.Node{ID: id, Kind: adgo.NodeActivity, Activity: ActivityRecord, Requires: []string{"request"}}
 	}
 	return adgo.Compile(adgo.Definition{
-		ID: PlanID, Version: PlanVersion, InitialData: []string{"request"},
+		ID: PlanID, Version: version, InitialData: []string{"request"},
 		Metadata: map[string]string{"purpose": "bounded stateful camera recovery"},
 		Nodes: []adgo.Node{
 			{ID: NodeValidate, Kind: adgo.NodeActivity, Activity: ActivityValidate, Requires: []string{"request"}, Produces: []string{"request_valid"}, Next: []adgo.Transition{{To: NodeProbeNet}}},
