@@ -3,9 +3,8 @@
   "intent": "Mechanically enforce Home Sentinel v1's supported single-writer physical-control topology so two control-plane processes cannot concurrently admit conflicting durable owners for the same installation runtime root.",
   "status_before": "OPEN",
   "risk_class": "CRITICAL",
-  "finding": "F-018",
   "invariants": [
-    "Exactly one Home Sentinel control-plane writer may own a canonical runtime root in supported v1 topology.",
+    "F-018 is confirmed: exactly one Home Sentinel control-plane writer may own a canonical runtime root in supported v1 topology.",
     "The writer guard is acquired before application database migration, orchestration services, HTTP service availability, or physical gateway control becomes available.",
     "The writer guard is held for the complete App lifetime, including downstream human waits, reconciliation waits, timers and crash-recovery work.",
     "A second process targeting the same canonical runtime root fails closed; it does not enter degraded multi-writer mode.",
@@ -16,20 +15,21 @@
     "Independent runtime roots controlling the same physical devices are outside supported v1 topology and must not be claimed safe.",
     "Distributed multi-writer control is an explicit future mode requiring real fencing semantics rather than a configuration toggle."
   ],
-  "evidence": [
-    "internal/orchestration/resourceguard/guard.go explicitly states that Check + StartOrLoad must be serialized within one process and multi-process control planes need distributed admission/fencing.",
-    "door, siren and camera services use process-local startMu around resourceguard.Check and StartOrLoad.",
-    "pinned Axiom ADGO Production exposes AdmissionController, but Home Sentinel physical services do not bind whole-execution ownership to it.",
-    "pinned Axiom ADGO PebbleStore documents that Pebble owns a process-level database lock for the DB lifetime.",
-    "app.Open currently begins durable initialization without a control-plane writer guard."
-  ],
   "contracts": [
+    "Evidence: internal/orchestration/resourceguard/guard.go explicitly states that Check + StartOrLoad must be serialized within one process and multi-process control planes need distributed admission/fencing.",
+    "Evidence: door, siren and camera services use process-local startMu around resourceguard.Check and StartOrLoad.",
+    "Evidence: pinned Axiom ADGO Production exposes AdmissionController, but Home Sentinel physical services do not bind whole-execution ownership to it.",
+    "Evidence: pinned Axiom ADGO PebbleStore documents that Pebble owns a process-level database lock for the DB lifetime.",
+    "Evidence: app.Open currently begins durable initialization without a control-plane writer guard.",
     "internal/app.Open and App.Close startup/cleanup lifecycle",
     "internal/orchestration/resourceguard durable execution ownership semantics",
     "pinned Axiom ADGO PebbleStore process-level database lock",
     "config.Database.Path as the installation-local durable anchor from which the canonical runtime root is derived",
     "I-005 physical ownership requires more than process-local locking",
-    "I-025 v1 single-writer supported topology"
+    "I-025 v1 single-writer supported topology",
+    "Preferred implementation: create internal/orchestration/topology WriterGuard owning a dedicated ADGO PebbleStore under a canonical runtime-root lock directory; acquire in app.Open before database.Open/Migrate; store on App; release last in App.Close and all partial-startup cleanup paths.",
+    "Preferred implementation: canonicalize with absolute/clean path semantics and resolve filesystem aliases after ensuring the root exists; reject empty or unusable roots fail closed.",
+    "Preferred implementation: use deterministic subprocess handshake for cross-process proof and do not introduce stale PID locks or TTL fencing."
   ],
   "code_surfaces": [
     "internal/orchestration/topology/writer.go",
@@ -38,14 +38,6 @@
     "internal/app/app.go",
     "internal/app/*test.go",
     "deployment/operator documentation if needed"
-  ],
-  "preferred_implementation": [
-    "Create an orchestration/topology WriterGuard owning a dedicated ADGO PebbleStore under a canonical runtime-root lock directory such as control-plane-writer.",
-    "Canonicalize the runtime root with absolute/clean path semantics before deriving the lock DB path; reject empty or unusable roots fail closed.",
-    "Acquire the guard at the beginning of app.Open after configuration validation but before database.Open/Migrate or service startup.",
-    "Store the guard on App and close it last from App.Close; partial-startup cleanup must close it as well.",
-    "Use a deterministic subprocess handshake to prove cross-process exclusion and release/reacquisition. Do not infer cross-process behavior from two goroutines alone.",
-    "Do not introduce stale PID lock files or TTL-based fencing as the v1 safety primitive."
   ],
   "required_gates": [
     "static",
@@ -59,7 +51,7 @@
     "mutation-critical",
     "replay",
     "security",
-    "benchmark"
+    "performance"
   ],
   "acceptance_evidence": [
     "WriterGuard acquires a process-lifetime lock for one canonical runtime root and exposes idempotent Close semantics.",
@@ -72,6 +64,6 @@
     "Documentation states that v1 supports one writer per installation/runtime root and does not claim different roots targeting the same physical devices are safe.",
     "No ADGO admission TTL is represented as durable device fencing for whole non-terminal executions.",
     "Engineering-loop selects the new production topology package as mutation-critical; Gremlins produces non-empty evidence with zero lived, not-covered or timeout blockers.",
-    "Repository module/static/unit/race/reconciliation/benchmark and security/SBOM/Trivy qualification pass on one final SHA."
+    "Repository module/static/unit/race/reconciliation/performance and security/SBOM/Trivy qualification pass on one final SHA."
   ]
 }
