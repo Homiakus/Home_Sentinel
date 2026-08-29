@@ -27,7 +27,11 @@ func TestCanonicalRootAliasesAndValidation(t *testing.T) {
 	}
 
 	base := t.TempDir()
-	rel, err := filepath.Rel(".", base)
+	workingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("working directory: %v", err)
+	}
+	rel, err := filepath.Rel(workingDir, base)
 	if err != nil {
 		t.Fatalf("relative path: %v", err)
 	}

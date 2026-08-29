@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/Homiakus/Home_Sentinel/internal/config"
 	"github.com/Homiakus/Home_Sentinel/internal/database"
 	"github.com/Homiakus/Home_Sentinel/internal/httpserver"
+	"github.com/Homiakus/Home_Sentinel/internal/telemetry"
 )
 
 func main() {
@@ -53,13 +55,16 @@ func serve() error {
 	if err != nil {
 		return err
 	}
-	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	runtimeLogs := telemetry.NewLogBuffer(4096, 8192)
+	logOutput := io.MultiWriter(os.Stdout, runtimeLogs)
+	log := slog.New(slog.NewJSONHandler(logOutput, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	a, err := app.Open(context.Background(), cfg, log)
 	if err != nil {
 		return err
 	}
 	defer a.Close()
 	s := httpserver.New(a)
+	s.EnableRuntimeLogs(runtimeLogs)
 	errCh := make(chan error, 1)
 	go func() { log.Info("sentinel starting", "listen", cfg.Server.ListenAddress); errCh <- s.ListenAndServe() }()
 	sigCh := make(chan os.Signal, 1)
