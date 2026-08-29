@@ -111,12 +111,12 @@ func newBundleCatalog(
 }
 
 func cloneBindings(in executionBindings) executionBindings {
-	out := executionBindings{unlockApprovalNode: in.unlockApprovalNode}
-	if len(in.reconcileNodes) > 0 {
-		out.reconcileNodes = make(map[string]struct{}, len(in.reconcileNodes))
-		for nodeID := range in.reconcileNodes {
-			out.reconcileNodes[nodeID] = struct{}{}
-		}
+	out := executionBindings{
+		unlockApprovalNode: in.unlockApprovalNode,
+		reconcileNodes:     make(map[string]struct{}, len(in.reconcileNodes)),
+	}
+	for nodeID := range in.reconcileNodes {
+		out.reconcileNodes[nodeID] = struct{}{}
 	}
 	return out
 }
