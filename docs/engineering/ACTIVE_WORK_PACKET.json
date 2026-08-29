@@ -1,5 +1,5 @@
 {
-  "packet": "docs/engineering/work-packets/t006-single-writer-topology.json",
-  "mutation_base": "2e8b9606212f47bf04d66bf5f1833a52195b7018",
+  "packet": "docs/engineering/work-packets/ops-crossplatform-manager.json",
+  "mutation_base": "2d109419912e9293c38fda83e6b8aa01ab86cc6f",
   "max_commits": 5
 }

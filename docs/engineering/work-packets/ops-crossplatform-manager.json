@@ -1,0 +1,48 @@
+{
+  "plan_item": "OPS-CROSSPLATFORM-MANAGER",
+  "intent": "Provide one cross-platform Go control utility for Home Sentinel build, setup, host lifecycle and Docker Compose operations while preserving the runtime's fail-closed loopback-only plaintext HTTP invariant.",
+  "status_before": "OPEN",
+  "risk_class": "HIGH",
+  "invariants": [
+    "The primary Sentinel HTTP runtime never requires a non-loopback plaintext bind.",
+    "Production Compose publishes the control-plane HTTP port only on host loopback.",
+    "Container ingress may forward only to an explicit loopback upstream in the Sentinel network namespace.",
+    "The management implementation compiles and tests on Windows, Linux and macOS without shell-dependent core logic.",
+    "stack-up fails closed when production images, secrets or the Compose security contract are incomplete."
+  ],
+  "contracts": [
+    "cmd/sentinel proxy is a bounded reverse-proxy adapter whose upstream must be localhost or a loopback IP.",
+    "deploy/compose/compose.prod.yml uses sentinel-ingress with network_mode service:sentinel and hard-binds host 127.0.0.1:8080.",
+    "cmd/sentinelctl is standard-library Go; scripts are launchers only.",
+    "Portable host process lifecycle is split behind Windows and non-Windows build tags.",
+    "Docker operations require Compose v2 and validated .env inputs before stack creation."
+  ],
+  "code_surfaces": [
+    "cmd/sentinel/main.go",
+    "cmd/sentinel/proxy.go",
+    "cmd/sentinel/proxy_test.go",
+    "cmd/sentinelctl/*.go",
+    "deploy/compose/compose.prod.yml",
+    ".env.example",
+    ".github/workflows/ci.yml",
+    "scripts/sentinelctl",
+    "scripts/sentinelctl.ps1",
+    "docs/MANAGEMENT.md"
+  ],
+  "required_gates": [
+    "static",
+    "unit",
+    "property",
+    "race",
+    "contract",
+    "integration",
+    "security"
+  ],
+  "acceptance_evidence": [
+    "sentinel proxy accepts a loopback upstream and rejects non-loopback or unsupported-scheme upstreams.",
+    "The production Compose file no longer requests SENTINEL_LISTEN=0.0.0.0 for the primary application.",
+    "The Sentinel host publication is fixed to 127.0.0.1:8080 and SENTINEL_BIND_IP is not an operator override.",
+    "sentinelctl unit tests and builds pass on GitHub-hosted Ubuntu, Windows and macOS runners.",
+    "The normal repository verification, security and engineering-loop workflows pass on the final SHA."
+  ]
+}
