@@ -4,17 +4,27 @@ Home Sentinel — локальная security/automation платформа на
 
 ## Быстрый запуск и управление
 
-Для Linux добавлен единый управляющий скрипт сборки, первоначальной настройки и эксплуатации:
+Управление теперь реализовано кроссплатформенным Go CLI и одинаково работает на Windows, Linux и macOS:
 
 ```bash
-./scripts/sentinelctl setup
-./scripts/sentinelctl doctor
-./scripts/sentinelctl build
-./scripts/sentinelctl start
-./scripts/sentinelctl status
+go run ./cmd/sentinelctl setup
+go run ./cmd/sentinelctl doctor
+go run ./cmd/sentinelctl build
+go run ./cmd/sentinelctl start
+go run ./cmd/sentinelctl status
 ```
 
-Запуск `./scripts/sentinelctl` без аргументов открывает интерактивное меню. Также доступны `stop`, `restart`, `logs`, `update`, Docker image build и установка systemd-службы.
+На Linux/macOS остаётся короткий launcher `./scripts/sentinelctl`, на Windows — `./scripts/sentinelctl.ps1`. Оба только запускают Go CLI; бизнес-логики в shell больше нет.
+
+Полный Docker Compose stack после заполнения `.env`:
+
+```bash
+go run ./cmd/sentinelctl stack-config
+go run ./cmd/sentinelctl stack-up
+go run ./cmd/sentinelctl stack-status
+```
+
+Control-plane HTTP в production Compose жёстко публикуется только на `127.0.0.1:8080`. Внутри контейнерного network namespace отдельный `sentinel-ingress` проксирует этот порт на loopback-only Sentinel (`127.0.0.1:18080`), поэтому основной сервер не ослабляет свою fail-closed политику remote plaintext bind.
 
 Подробная инструкция: [`docs/MANAGEMENT.md`](docs/MANAGEMENT.md).
 

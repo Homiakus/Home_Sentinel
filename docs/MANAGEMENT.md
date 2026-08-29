@@ -1,177 +1,184 @@
 # Сборка, настройка и управление Home Sentinel
 
-Для обычной установки на Linux в репозитории есть единая точка управления:
+## Единый кроссплатформенный CLI
+
+Основная точка управления написана на Go:
 
 ```bash
-./scripts/sentinelctl
+go run ./cmd/sentinelctl
 ```
 
-Если запустить её без аргументов в интерактивном терминале, откроется простое меню. Все действия также доступны отдельными командами, поэтому скрипт удобно использовать по SSH и в автоматизации.
+Она одинаково компилируется на Windows, Linux и macOS. Shell больше не содержит логики управления: `scripts/sentinelctl` и `scripts/sentinelctl.ps1` — только тонкие launchers.
 
-## Быстрый старт
+После сборки CLI можно использовать как обычный исполняемый файл:
 
 ```bash
-git clone https://github.com/Homiakus/Home_Sentinel.git
-cd Home_Sentinel
-
-./scripts/sentinelctl setup
-./scripts/sentinelctl doctor
-./scripts/sentinelctl build
-./scripts/sentinelctl start
-./scripts/sentinelctl status
+go build -o bin/sentinelctl ./cmd/sentinelctl
 ```
 
-После запуска web-интерфейс по текущему security-контракту слушает только loopback:
+На Windows получится `bin\sentinelctl.exe`.
 
-```text
-http://127.0.0.1:8080
+## Быстрый host-mode запуск
+
+```bash
+go run ./cmd/sentinelctl setup
+go run ./cmd/sentinelctl doctor
+go run ./cmd/sentinelctl build
+go run ./cmd/sentinelctl start
+go run ./cmd/sentinelctl status
 ```
 
-Для удалённого доступа используйте доверенный VPN или reverse proxy/TLS. Скрипт специально не переводит HTTP-сервер на `0.0.0.0` автоматически.
+Host-mode Sentinel слушает `127.0.0.1:8080`. Для удалённого доступа используйте VPN или TLS reverse proxy.
 
-## Что делает `setup`
-
-Команда идемпотентна: её можно запускать повторно.
-
-Она создаёт локальные runtime-каталоги, которые уже исключены из Git:
-
-```text
-bin/                    собранный бинарник
-var/config.json         локальная конфигурация
-var/data/               SQLite и runtime-данные
-var/log/                журналы
-var/run/                PID-файл host-mode процесса
-var/frigate-secrets/    локальные credentials Frigate
-```
-
-`var/config.json` создаётся с безопасным минимальным профилем: loopback HTTP, стандартные таймауты и выключенные experimental features. Если `.env` отсутствует, рядом создаётся копия `.env.example` для будущей Docker/production настройки. Production image placeholders скрипт не подменяет непроверенными версиями.
-
-## Основные команды
+## Команды
 
 | Команда | Назначение |
 |---|---|
 | `menu` | интерактивное меню |
-| `setup` | подготовить каталоги и базовую конфигурацию |
-| `configure` | открыть `var/config.json` в `$EDITOR` |
-| `doctor` | проверить Go, Git, Make, JSON-конфиг, порт 8080, Docker и runtime state |
-| `build` | собрать `./cmd/sentinel` в `bin/sentinel` с build metadata |
-| `image` | собрать локальный Docker image `home-sentinel:local` |
-| `check` | запустить полный существующий `make check` |
-| `run` | запустить Sentinel в foreground |
-| `start` | запустить Sentinel в background |
-| `stop` | корректно остановить background-процесс |
-| `restart` | перезапустить |
-| `status` | показать PID, версию, пути и состояние TCP/8080 |
-| `logs [N]` | показать последние N строк и следить за логом |
-| `update` | `git pull --ff-only`, rebuild и restart при необходимости |
+| `setup` | runtime-каталоги, базовый config и `.env`-шаблон |
+| `configure` | открыть локальный JSON config |
+| `doctor` | Go/Git/config/port/Docker/Compose диагностика |
+| `build` | собрать `cmd/sentinel` с build metadata |
+| `image` | собрать локальный Docker image |
+| `check` | кроссплатформенные gofmt/vet/test/supply-chain/engloop проверки |
+| `run` | foreground host-mode |
+| `start` / `stop` | background host-mode |
+| `restart` | перезапуск host-mode |
+| `status` | PID, версия, пути и порт |
+| `logs [N]` | tail/follow журнала без зависимости от Unix `tail` |
+| `update` | `git pull --ff-only`, rebuild, restart |
+| `stack-config` | проверить production Compose и обязательные секреты |
+| `stack-up` | поднять полный production stack |
+| `stack-down` | остановить stack без удаления volumes |
+| `stack-restart` | перезапустить stack |
+| `stack-status` | `docker compose ps` |
+| `stack-logs` | follow логов Compose |
+| `stack-pull` | pull images + reconcile `up -d` |
 
-`update` отказывается работать при незакоммиченных локальных изменениях — это защищает локальные правки от случайной перезаписи.
+Systemd-команды `service-install/service-enable/service-disable/service-status/service-remove` сохранены для Linux. На Windows/macOS portable host-mode `start/stop/restart` работает без systemd.
 
-## Проверка окружения
-
-```bash
-./scripts/sentinelctl doctor
-```
-
-`doctor` возвращает ненулевой exit code только при настоящих блокирующих ошибках. Предупреждения, например незаполненный `.env`, не мешают host-mode запуску.
-
-Версия Go берётся из `.go-version`. Если установленная версия ниже требуемой, сборка останавливается до начала компиляции.
-
-## Настройка
-
-```bash
-export EDITOR=nano
-./scripts/sentinelctl configure
-```
-
-Runtime precedence самого приложения сохраняется без изменений:
+## Что создаёт setup
 
 ```text
-defaults < SENTINEL_CONFIG JSON < SENTINEL_* environment
+bin/
+var/config.json
+var/data/
+var/log/
+var/run/
+var/frigate-secrets/
+.env
 ```
 
-Управляющий скрипт задаёт только необходимые host-mode overrides:
+`var/`, `bin/` и `.env` уже исключены из Git. Повторный `setup` не перезаписывает существующий config или `.env`.
+
+## Как устранён Docker bind conflict
+
+Основной HTTP runtime Home Sentinel намеренно запрещает plaintext bind на non-loopback. Это ограничение не отключается и не обходится флагом.
+
+Production Compose использует два процесса из одного и того же Sentinel image:
 
 ```text
-SENTINEL_CONFIG=<repo>/var/config.json
-SENTINEL_DB_PATH=<repo>/var/data/sentinel.db
-SENTINEL_LISTEN=127.0.0.1:8080
-SENTINEL_FRIGATE_CREDENTIALS_DIR=<repo>/var/frigate-secrets
+host 127.0.0.1:8080
+        |
+        v
+Docker published port :8080
+        |
+        v
+sentinel-ingress 0.0.0.0:8080
+(shared network namespace)
+        |
+        v
+Sentinel 127.0.0.1:18080
 ```
 
-Дополнительные `SENTINEL_*` переменные можно задавать перед запуском скрипта.
-
-## Постоянная служба systemd
-
-На Linux Home Sentinel можно перевести из PID-managed режима в нормальную системную службу:
+`sentinel-ingress` запускает встроенную команду:
 
 ```bash
-./scripts/sentinelctl service-install
-./scripts/sentinelctl service-enable
-./scripts/sentinelctl service-status
+sentinel proxy --listen 0.0.0.0:8080 --upstream http://127.0.0.1:18080
 ```
 
-Отключение:
+Ingress разрешает только loopback upstream и очищает входящие forwarding headers перед проксированием. Published control-plane порт в Compose жёстко задан как `127.0.0.1:8080:8080` и больше не управляется через `.env`, поэтому случайно опубликовать admin/control HTTP на `0.0.0.0` через штатный Compose нельзя.
+
+Для удалённого доступа ставьте VPN или TLS reverse proxy на host и направляйте его на `127.0.0.1:8080`.
+
+## Production Compose
+
+Сначала:
 
 ```bash
-./scripts/sentinelctl service-disable
+go run ./cmd/sentinelctl setup
 ```
 
-Удаление unit-файла:
+Затем отредактируйте `.env`:
+
+- замените все `registry.example.invalid` / `REPLACE_ME` на проверенные immutable image refs;
+- укажите адрес WebRTC, доступный только доверенной LAN/VPN;
+- создайте три MQTT password files и пропишите их host paths.
+
+Проверка без запуска:
 
 ```bash
-./scripts/sentinelctl service-remove
+go run ./cmd/sentinelctl stack-config
 ```
 
-Unit запускается от текущего пользователя, использует тот же `var/config.json`, автоматически перезапускается при ошибке и получает `UMask=0077`, `NoNewPrivileges=true`, `PrivateTmp=true`.
+`stack-config` fail-closed проверяет:
 
-Не используйте одновременно `start` и активный systemd unit: выберите один способ управления процессом.
+1. наличие Docker и Compose v2;
+2. заполненные image refs;
+3. наличие MQTT secret files;
+4. обязательные Frigate WebRTC параметры;
+5. сохранность loopback-only control-plane Compose contract;
+6. `docker compose config --quiet`.
 
-## Docker
-
-Сборка локального Sentinel image:
+После успешной проверки:
 
 ```bash
-./scripts/sentinelctl image
+go run ./cmd/sentinelctl stack-up
+go run ./cmd/sentinelctl stack-status
 ```
 
-Production Compose сейчас **не запускается автоматически** через `sentinelctl`. Причина — существующий compose-файл задаёт приложению `SENTINEL_LISTEN=0.0.0.0:8080`, а текущий runtime намеренно запрещает non-loopback plaintext bind. Автоматически обходить эту проверку небезопасно.
-
-`doctor` явно показывает это как предупреждение. После того как в архитектуре будет формализован доверенный reverse-proxy/container bind (или TLS listener), управление полным Compose-стеком можно безопасно включить в тот же скрипт.
-
-## Makefile shortcuts
-
-Те же операции доступны через Makefile:
+Обновление image stack:
 
 ```bash
-make setup
-make doctor
-make build
-make start
-make status
-make stop
-make image
-make manage
+go run ./cmd/sentinelctl stack-pull
 ```
 
-`make manage` открывает интерактивное меню.
+## Windows
 
-## Восстановление после ошибки запуска
+Из PowerShell:
 
-Если `start` завершился сразу, скрипт автоматически показывает последние строки журнала. Полный журнал:
-
-```bash
-./scripts/sentinelctl logs 200
+```powershell
+.\scripts\sentinelctl.ps1 setup
+.\scripts\sentinelctl.ps1 doctor
+.\scripts\sentinelctl.ps1 build
+.\scripts\sentinelctl.ps1 start
 ```
 
-Проверка:
+Или напрямую:
+
+```powershell
+go run ./cmd/sentinelctl status
+```
+
+Фоновый процесс запускается detached; `stop` завершает его через Windows process API. Docker-команды работают через Docker Desktop и Compose v2. Пути secret files в `.env` должны быть путями host, доступными Docker Desktop.
+
+## Linux/macOS
 
 ```bash
+./scripts/sentinelctl setup
 ./scripts/sentinelctl doctor
+./scripts/sentinelctl build
+./scripts/sentinelctl start
 ```
 
-После изменения конфигурации:
+Launcher использует POSIX `sh`, но вся логика находится в Go CLI.
 
-```bash
-./scripts/sentinelctl restart
-```
+## Проверка кроссплатформенности
+
+CI отдельно компилирует и тестирует `cmd/sentinelctl` на:
+
+- Ubuntu;
+- Windows;
+- macOS.
+
+Таким образом изменения platform-specific process management не считаются готовыми, пока не проходят все три runner'а.

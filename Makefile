@@ -5,9 +5,9 @@ TOOLS_DIR ?= .tools
 ARTIFACTS_DIR ?= .artifacts
 ENGLOOP := go run ./cmd/sentinel-engloop
 SUPPLYCHAIN := go run ./cmd/sentinel-supplychain
-SENTINELCTL := ./scripts/sentinelctl
+SENTINELCTL := go run ./cmd/sentinelctl
 
-.PHONY: fmt vet test test-race check engloop-reconcile engloop-strict engloop-gates edge-suite supply-chain govulncheck-install govulncheck sbom-install sbom gremlins-install mutation-diff manage setup doctor build image start stop restart status
+.PHONY: fmt vet test test-race check engloop-reconcile engloop-strict engloop-gates edge-suite supply-chain govulncheck-install govulncheck sbom-install sbom gremlins-install mutation-diff manage setup doctor build image start stop restart status stack-config stack-up stack-down stack-restart stack-status stack-pull
 
 fmt:
 	gofmt -w $$(find . -name '*.go' -not -path './vendor/*')
@@ -47,6 +47,24 @@ restart:
 
 status:
 	$(SENTINELCTL) status
+
+stack-config:
+	$(SENTINELCTL) stack-config
+
+stack-up:
+	$(SENTINELCTL) stack-up
+
+stack-down:
+	$(SENTINELCTL) stack-down
+
+stack-restart:
+	$(SENTINELCTL) stack-restart
+
+stack-status:
+	$(SENTINELCTL) stack-status
+
+stack-pull:
+	$(SENTINELCTL) stack-pull
 
 engloop-reconcile:
 	$(ENGLOOP) reconcile --root .

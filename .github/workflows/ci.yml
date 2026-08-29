@@ -64,3 +64,27 @@ jobs:
         run: |
           go test ./internal/policy/risk -run '^$' -bench BenchmarkAssess -benchtime=25x
           go test ./internal/correlation -run '^$' -bench BenchmarkCorrelatorIngest -benchtime=25x
+
+  manager-cross-platform:
+    name: sentinelctl (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .go-version
+          cache: true
+
+      - name: Test manager
+        run: go test ./cmd/sentinelctl -count=1
+
+      - name: Build manager
+        run: go build ./cmd/sentinelctl
