@@ -1,0 +1,58 @@
+{
+  "plan_item": "T-024",
+  "intent": "Establish the immutable camera-recovery v1 execution-bundle release boundary before any future semantic v2 so persisted recovery work remains routable by exact identity and unknown non-terminal state fails closed.",
+  "status_before": "OPEN",
+  "risk_class": "CRITICAL",
+  "invariants": [
+    "Current camera v1 PlanID, PlanVersion and PlanDigest are an immutable release identity; semantic graph or handler changes under the same identity fail tests.",
+    "Every non-terminal persisted camera execution is dispatched only to the execution bundle matching its PlanDigest and version-specific operator binding.",
+    "New camera executions start only on the active bundle.",
+    "Unknown or mismatched non-terminal camera bundle identity fails Open or Serve preflight closed.",
+    "Terminal historical camera records remain readable and do not require executable retained bundles.",
+    "Operator recovery decisions resolve through the persisted execution bundle rather than unconditional current-plan engine/constants.",
+    "Serve requalifies persisted state and uses Axiom Host resilient coordination across retained and active bundles.",
+    "A future distinct active bundle can coexist with retained v1 through Axiom Host without introducing a fake semantic v2 in production today.",
+    "External reconnect idempotency and resource ownership remain preserved across restart and bundle routing."
+  ],
+  "contracts": [
+    "repository history characterization confirms no semantic camera predecessor beyond current v1 and formatting normalization",
+    "golden camera v1 digest sha256:a0781f96957948af4ea5535c04f1a00ffffa40653c55cd0ed8ea0cfbcd20706f is deterministic on pinned Axiom 7682ba9170dd",
+    "v1 Registry is built only from explicitly version-pinned handler functions",
+    "bundle metadata pins plan, Registry/handlers and operator node binding",
+    "Axiom Host owns active and retained engines over the existing Production Store/Router",
+    "Start uses active bundle while Drive and operator resolution resolve persisted identity first",
+    "Get validates non-terminal identity but preserves terminal historical reads",
+    "Open and Serve preflight validate all non-terminal persisted camera executions",
+    "an internal constructor/test seam can register retained v1 plus a distinct test active bundle without changing public production semantics"
+  ],
+  "code_surfaces": [
+    "internal/orchestration/recovery/camera/plan.go",
+    "internal/orchestration/recovery/camera/handlers.go",
+    "internal/orchestration/recovery/camera/service.go",
+    "internal/orchestration/recovery/camera/*bundle*",
+    "internal/orchestration/recovery/camera/*upgrade*",
+    "internal/orchestration/recovery/camera/*test*"
+  ],
+  "required_gates": [
+    "static",
+    "unit",
+    "property",
+    "race",
+    "contract",
+    "fault",
+    "mutation-critical",
+    "replay",
+    "security"
+  ],
+  "acceptance_evidence": [
+    "golden v1 identity test fails on plan digest drift",
+    "existing healthy/reconnect/operator behavior remains green",
+    "Pebble restart preserves a waiting operator decision and resolves retry through the exact v1 bundle with one reconnect",
+    "unknown/mismatched non-terminal persisted identity fails closed while terminal history does not block startup",
+    "Get rejects unknown non-terminal identity but can read terminal retired history",
+    "Serve preflight rejects unsupported non-terminal state and Host resilient coordination replaces one-current-engine serving",
+    "internal multi-bundle test proves retained v1 and distinct future-active bundle coexist and route by digest",
+    "ci/race/security pass",
+    "Gremlins produces non-empty camera orchestration evidence with zero lived/not-covered/timeout critical blockers"
+  ]
+}

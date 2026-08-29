@@ -1,5 +1,5 @@
 {
-  "packet": "docs/engineering/work-packets/t023-door-v1-execution-bundle.json",
-  "mutation_base": "dfced3277a61211ae312b8eef18e761b980a9238",
+  "packet": "docs/engineering/work-packets/t024-camera-v1-execution-bundle.json",
+  "mutation_base": "a130177ed3b2b57aded26b32ec003e6da0da2c46",
   "max_commits": 5
 }
